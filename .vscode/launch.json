@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Ratroo Dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_dev.dart"
+    },
+    {
+      "name": "Ratroo Staging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_stg.dart"
+    },
+    {
+      "name": "Ratroo Prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_prod.dart"
+    }
+  ]
+}
