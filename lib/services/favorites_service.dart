@@ -12,10 +12,10 @@ class FavoritesService {
       final response = await _apiClient.client.get('/favorites');
       return ApiResponse.fromJson(
         response.data,
-        (data) => (data as List).map((e) => RouteModel.fromJson(e)).toList(),
+        (data) => asList(data).map((e) => RouteModel.fromJson(e)).toList(),
       );
     } on DioException catch (e) {
-      return ApiResponse(success: false, error: e.message);
+      return ApiResponse(success: false, error: friendlyError(e));
     } catch (e) {
       return ApiResponse(success: false, error: e.toString());
     }
@@ -29,7 +29,7 @@ class FavoritesService {
         (data) => true,
       );
     } on DioException catch (e) {
-      return ApiResponse(success: false, error: e.message);
+      return ApiResponse(success: false, error: friendlyError(e));
     } catch (e) {
       return ApiResponse(success: false, error: e.toString());
     }

@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/api_providers.dart';
 import '../models/place.dart';
 import '../models/route.dart';
+import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/confidence_gauge.dart';
@@ -34,10 +35,7 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
@@ -81,7 +79,7 @@ class HomeScreen extends ConsumerWidget {
               TextSpan(text: 'Where to, '),
               TextSpan(
                 text: 'Kolkata?',
-                style: TextStyle(color: Color(0xFF00B95C)),
+                style: TextStyle(color: RatrooTheme.primaryColor),
               ),
             ],
           ),
@@ -486,7 +484,6 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildBottomNav(BuildContext context) {
     final theme = Theme.of(context);
     return NavigationBar(
-      backgroundColor: theme.colorScheme.surface,
       elevation: 0,
       indicatorColor: theme.colorScheme.primary.withValues(alpha: 0.1),
       selectedIndex: 2,

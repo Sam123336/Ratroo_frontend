@@ -15,10 +15,10 @@ class ConnectivityService {
       );
       return ApiResponse.fromJson(
         response.data,
-        (data) => (data as List).map((e) => VillageModel.fromJson(e)).toList(),
+        (data) => asList(data).map((e) => VillageModel.fromJson(e)).toList(),
       );
     } on DioException catch (e) {
-      return ApiResponse(success: false, error: e.message);
+      return ApiResponse(success: false, error: friendlyError(e));
     } catch (e) {
       return ApiResponse(success: false, error: e.toString());
     }

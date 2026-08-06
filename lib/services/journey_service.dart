@@ -18,10 +18,13 @@ class JourneyService {
       );
       return ApiResponse.fromJson(
         response.data,
-        (data) => (data as List).map((e) => JourneyPlanModel.fromJson(e)).toList(),
+        // /v1/journey returns a single plan object, not a list.
+        (data) => data is List
+            ? data.map((e) => JourneyPlanModel.fromJson(e)).toList()
+            : [JourneyPlanModel.fromJson(data as Map<String, dynamic>)],
       );
     } on DioException catch (e) {
-      return ApiResponse(success: false, error: e.message);
+      return ApiResponse(success: false, error: friendlyError(e));
     } catch (e) {
       return ApiResponse(success: false, error: e.toString());
     }

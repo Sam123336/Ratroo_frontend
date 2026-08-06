@@ -19,10 +19,10 @@ class NearbyService {
       );
       return ApiResponse.fromJson(
         response.data,
-        (data) => (data as List).map((e) => Place.fromJson(e)).toList(),
+        (data) => asList(data).map((e) => Place.fromJson(e)).toList(),
       );
     } on DioException catch (e) {
-      return ApiResponse(success: false, error: e.message);
+      return ApiResponse(success: false, error: friendlyError(e));
     } catch (e) {
       return ApiResponse(success: false, error: e.toString());
     }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../providers/api_providers.dart';
 import '../models/journey.dart';
 import '../models/place.dart';
+import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/confidence_gauge.dart';
@@ -86,7 +87,6 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
     final showJourneyResults = selectedFrom != null && selectedTo != null;
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Journey Planner'),
         leading: IconButton(
@@ -140,7 +140,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   // To Field
                   Row(
                     children: [
-                      Icon(Icons.location_on, color: const Color(0xFFFC413D), size: 20),
+                      const Icon(Icons.location_on, color: RatrooTheme.confidenceLowFill, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/api_providers.dart';
 import '../models/route.dart';
+import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/confidence_gauge.dart';
@@ -20,7 +21,6 @@ class RouteDetailsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     if (routeId == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Route & Reliability')),
@@ -32,7 +32,6 @@ class RouteDetailsScreen extends ConsumerWidget {
     final routeDetailsAsync = ref.watch(routeDetailsProvider(routeId!));
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Route & Reliability'),
         leading: IconButton(
@@ -151,7 +150,7 @@ class RouteDetailsScreen extends ConsumerWidget {
                         width: 12,
                         height: 12,
                         decoration: BoxDecoration(
-                          color: confidence >= 0.8 ? const Color(0xFF00B95C) : const Color(0xFFFC413D),
+                          color: RatrooTheme.confidence(confidence).$1,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -200,7 +199,7 @@ class RouteDetailsScreen extends ConsumerWidget {
                       );
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00B95C),
+                      backgroundColor: RatrooTheme.confidenceHighFill,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),

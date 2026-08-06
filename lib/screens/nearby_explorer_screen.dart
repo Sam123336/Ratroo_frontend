@@ -31,9 +31,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
     final nearbyPlacesAsync = ref.watch(nearbyPlacesProvider);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Nearby Explorer'),
         actions: [
           IconButton(

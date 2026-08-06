@@ -14,7 +14,7 @@ class AnalyticsService {
         (data) => data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      return ApiResponse(success: false, error: e.message);
+      return ApiResponse(success: false, error: friendlyError(e));
     } catch (e) {
       return ApiResponse(success: false, error: e.toString());
     }

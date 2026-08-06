@@ -16,12 +16,12 @@ class SearchService {
       
       return ApiResponse.fromJson(
         response.data,
-        (data) => (data as List).map((e) => Place.fromJson(e)).toList(),
+        (data) => asList(data).map((e) => Place.fromJson(e)).toList(),
       );
     } on DioException catch (e) {
       return ApiResponse(
         success: false,
-        error: e.message ?? 'An error occurred during search',
+        error: friendlyError(e),
       );
     } catch (e) {
       return ApiResponse(

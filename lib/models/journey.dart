@@ -9,10 +9,12 @@ class JourneyPlanModel {
     required this.totalFare,
   });
 
+  // Backend (JourneyResponseDto) speaks minutes; this model speaks seconds.
   factory JourneyPlanModel.fromJson(Map<String, dynamic> json) {
     return JourneyPlanModel(
       legs: (json['legs'] as List?)?.map((e) => JourneyLegModel.fromJson(e)).toList() ?? [],
-      totalDurationSeconds: json['totalDurationSeconds'] ?? 0,
+      totalDurationSeconds: json['totalDurationSeconds'] ??
+          ((json['totalDurationMinutes'] as num?)?.round() ?? 0) * 60,
       totalFare: (json['totalFare'] as num?)?.toDouble() ?? 0.0,
     );
   }
@@ -47,8 +49,10 @@ class JourneyLegModel {
       fromName: json['fromName'] ?? '',
       toName: json['toName'] ?? '',
       routeId: json['routeId'],
-      routeCode: json['routeCode'],
-      durationSeconds: json['durationSeconds'] ?? 0,
+      // Backend calls it serviceName / providerCode.
+      routeCode: json['routeCode'] ?? json['serviceName'] ?? json['providerCode'],
+      durationSeconds: json['durationSeconds'] ??
+          ((json['durationMinutes'] as num?)?.round() ?? 0) * 60,
     );
   }
 }

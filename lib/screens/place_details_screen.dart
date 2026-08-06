@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/api_providers.dart';
 import '../models/place.dart';
+import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
 
@@ -81,7 +82,7 @@ class PlaceDetailsScreen extends ConsumerWidget {
                   Text(
                     '$connectivityScore',
                     style: theme.textTheme.displayLarge?.copyWith(
-                      color: connectivityScore >= 80 ? const Color(0xFF00B95C) : const Color(0xFFFC413D),
+                      color: RatrooTheme.confidence(connectivityScore / 100).$2,
                       fontSize: 72,
                       fontWeight: FontWeight.bold,
                     ),

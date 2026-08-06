@@ -19,7 +19,8 @@ class ApiMetadata {
     return ApiMetadata(
       confidenceScore: (json['confidenceScore'] as num?)?.toDouble() ?? 0.0,
       dataSources: List<String>.from(json['dataSources'] ?? []),
-      timestamp: json['timestamp'] ?? '',
+      // Backend sends lastUpdated / lastSyncTimestamp.
+      timestamp: json['timestamp'] ?? json['lastUpdated'] ?? json['lastSyncTimestamp'] ?? '',
       processingTimeMs: json['processingTimeMs'] ?? 0,
     );
   }
@@ -46,6 +47,39 @@ class ApiResponse<T> {
       error: json['error'],
     );
   }
+}
+
+/// Dio's `.message` is a multi-paragraph essay about validateStatus — it was
+/// rendering verbatim inside empty states. Map it to one human sentence, and
+/// prefer the server's own message when there is one.
+String friendlyError(DioException e) {
+  final serverMessage = e.response?.data is Map ? e.response?.data['message'] : null;
+  if (serverMessage is String && serverMessage.isNotEmpty) return serverMessage;
+
+  switch (e.type) {
+    case DioExceptionType.connectionTimeout:
+    case DioExceptionType.sendTimeout:
+    case DioExceptionType.receiveTimeout:
+      return 'The server took too long to respond. Try again.';
+    case DioExceptionType.connectionError:
+      return "Can't reach Ratroo. Check your connection.";
+    case DioExceptionType.badResponse:
+      final code = e.response?.statusCode;
+      if (code == 404) return 'Nothing found for this request.';
+      if (code == 501) return 'This feature is not available yet.';
+      return 'Something went wrong on our side ($code).';
+    default:
+      return 'Something went wrong. Try again.';
+  }
+}
+
+/// Some endpoints return a bare list, others a paginated envelope
+/// (`{data: [...], total, page}` for /routes, `{data: [...], count}` for
+/// /stops/nearby). Unwrap both to a plain List.
+List<dynamic> asList(dynamic data) {
+  if (data is List) return data;
+  if (data is Map && data['data'] is List) return data['data'] as List;
+  return const [];
 }
 
 class ApiClient {

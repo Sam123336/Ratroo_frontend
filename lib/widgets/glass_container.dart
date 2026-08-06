@@ -1,9 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../core/theme.dart';
 
 class GlassContainer extends StatelessWidget {
   final Widget child;
   final double blur;
+
+  /// Fill opacity. 0.88 reads as frosted over a map; pass 1.0 for a solid card.
   final double opacity;
   final BorderRadius? borderRadius;
   final EdgeInsetsGeometry? padding;
@@ -17,7 +20,7 @@ class GlassContainer extends StatelessWidget {
     super.key,
     required this.child,
     this.blur = 10.0,
-    this.opacity = 0.15,
+    this.opacity = 0.88,
     this.borderRadius,
     this.padding,
     this.margin,
@@ -31,14 +34,20 @@ class GlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
-    final baseColor = color ?? (isDark ? Colors.white : Colors.black);
-    final effectiveBorderRadius = borderRadius ?? BorderRadius.circular(16.0);
+
+    // Frosted *surface*, not a black/white tint. The old default (black @ 15%
+    // over an opaque scaffold) flattened to solid #D9D9D9 — a grey slab, not glass.
+    final baseColor = color ?? theme.colorScheme.surface;
+    final effectiveBorderRadius = borderRadius ?? BorderRadius.circular(RatrooTheme.radiusLg);
 
     return Container(
       margin: margin,
       width: width,
       height: height,
+      decoration: BoxDecoration(
+        borderRadius: effectiveBorderRadius,
+        boxShadow: RatrooTheme.cardShadow(theme.brightness),
+      ),
       child: ClipRRect(
         borderRadius: effectiveBorderRadius,
         child: BackdropFilter(
@@ -48,10 +57,11 @@ class GlassContainer extends StatelessWidget {
             decoration: BoxDecoration(
               color: baseColor.withValues(alpha: opacity),
               borderRadius: effectiveBorderRadius,
-              border: border ?? Border.all(
-                color: baseColor.withValues(alpha: isDark ? 0.1 : 0.05),
-                width: 1.0,
-              ),
+              border: border ??
+                  Border.all(
+                    color: theme.colorScheme.onSurface.withValues(alpha: isDark ? 0.12 : 0.07),
+                    width: 1.0,
+                  ),
             ),
             child: child,
           ),
