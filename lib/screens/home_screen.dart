@@ -194,26 +194,36 @@ class HomeScreen extends ConsumerWidget {
 
   Widget _buildTransitMode(BuildContext context, IconData icon, String label) {
     final theme = Theme.of(context);
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: theme.colorScheme.primary, size: 28),
+
+    // These were decoration — no tap handler at all. Each now opens Nearby
+    // filtered to that mode.
+    return InkWell(
+      onTap: () => context.push('/nearby?mode=${label.toUpperCase()}'),
+      borderRadius: BorderRadius.circular(RatrooTheme.radiusMd),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: theme.colorScheme.primary, size: 28),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -491,6 +501,7 @@ class HomeScreen extends ConsumerWidget {
         if (index == 0) context.push('/route-details?id=019fbd03-cfac-72fb-b48f-21bb81b73f76');
         if (index == 1) context.push('/journey-planner');
         if (index == 3) context.push('/nearby');
+        if (index == 4) context.push('/profile');
       },
       destinations: const [
         NavigationDestination(

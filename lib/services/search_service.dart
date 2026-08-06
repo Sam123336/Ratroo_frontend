@@ -7,6 +7,19 @@ class SearchService {
 
   SearchService(this._apiClient);
 
+  /// Detail for one place by id. Place Details used to pass the id into
+  /// [searchPlaces], i.e. search for a UUID by name, which never matched.
+  Future<ApiResponse<Place>> getPlaceById(String id) async {
+    try {
+      final response = await _apiClient.client.get('/places/$id');
+      return ApiResponse.fromJson(response.data, (data) => Place.fromJson(data));
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: friendlyError(e));
+    } catch (e) {
+      return ApiResponse(success: false, error: e.toString());
+    }
+  }
+
   Future<ApiResponse<List<Place>>> searchPlaces(String query) async {
     try {
       final response = await _apiClient.client.get(

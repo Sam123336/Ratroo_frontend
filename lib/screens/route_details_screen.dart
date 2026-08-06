@@ -71,12 +71,17 @@ class RouteDetailsScreen extends ConsumerWidget {
           Container(
             height: 180,
             width: double.infinity,
+            // Was a NetworkImage of 'tile.openstreetmap.org/13/22.5726/88.3639.png'
+            // — lat/lng substituted into the {z}/{x}/{y} slots, so it 400'd on
+            // every build. A gradient until the API returns route geometry.
             decoration: BoxDecoration(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-              image: const DecorationImage(
-                image: NetworkImage('https://tile.openstreetmap.org/13/22.5726/88.3639.png'), // Mock tile map background snippet
-                fit: BoxFit.cover,
-                opacity: 0.3,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.primary.withValues(alpha: 0.12),
+                  theme.colorScheme.primary.withValues(alpha: 0.04),
+                ],
               ),
             ),
             child: Center(
@@ -225,7 +230,16 @@ class RouteDetailsScreen extends ConsumerWidget {
                 // Timetable deep link
                 Center(
                   child: TextButton.icon(
-                    onPressed: () {},
+                    // Was an empty onPressed. The operator's URL lives in the
+                    // providers table, which has no rows yet, so there is
+                    // nothing honest to open.
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'No official timetable URL recorded for ${route.providerCode} yet.',
+                        ),
+                      ),
+                    ),
                     icon: const Icon(Icons.open_in_new, size: 16),
                     label: Text('View official timetable on ${route.providerCode}'),
                   ),

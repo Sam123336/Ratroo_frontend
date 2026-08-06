@@ -6,6 +6,8 @@ import '../screens/place_details_screen.dart';
 import '../screens/rural_connectivity_screen.dart';
 import '../screens/nearby_explorer_screen.dart';
 import '../screens/analytics_screen.dart';
+import '../screens/auth_screen.dart';
+import '../screens/profile_screen.dart';
 
 final goRouter = GoRouter(
   initialLocation: '/',
@@ -32,11 +34,19 @@ final goRouter = GoRouter(
     ),
     GoRoute(
       path: '/nearby',
-      builder: (context, state) => const NearbyExplorerScreen(),
+      builder: (context, state) => NearbyExplorerScreen(mode: state.uri.queryParameters['mode']),
     ),
     GoRoute(
       path: '/analytics',
       builder: (context, state) => const AnalyticsScreen(),
+    ),
+    GoRoute(
+      path: '/auth',
+      builder: (context, state) => const AuthScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const ProfileScreen(),
     ),
   ],
 );

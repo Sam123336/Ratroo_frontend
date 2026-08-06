@@ -348,18 +348,21 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   ),
                   
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.verified, size: 14, color: Colors.blue),
-                          const SizedBox(width: 4),
-                          Text(
-                            _getProvenanceName(plan.legs),
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
+                      const Icon(Icons.verified, size: 14, color: Colors.blue),
+                      const SizedBox(width: 4),
+                      // Expanded + ellipsis: long service names ("KOLKATA to
+                      // ARAMBAG (NS)") pushed the gauge off-screen and the row
+                      // overflowed by 11px.
+                      Expanded(
+                        child: Text(
+                          _getProvenanceName(plan.legs),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       ConfidenceGauge(score: confidenceScore),
                     ],
                   )

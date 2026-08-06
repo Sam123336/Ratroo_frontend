@@ -7,7 +7,10 @@ plugins {
 
 android {
     namespace = "com.example.ratroo_app"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage compiles against SDK 37; flutter.compileSdkVersion
+    // is still 36 here. Compiling below a plugin's level is what produces
+    // MissingPluginException at runtime. SDK levels are backward compatible.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

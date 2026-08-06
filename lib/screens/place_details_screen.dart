@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/api_providers.dart';
 import '../models/place.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
 
-final placeDetailsProvider = FutureProvider.autoDispose.family<ApiResponse<List<Place>>, String>((ref, id) async {
+// Fetch by id. This used to call searchPlaces(id) — searching for a UUID by
+// name — so the screen could only ever render "No details found".
+final placeDetailsProvider = FutureProvider.autoDispose.family<ApiResponse<Place>, String>((ref, id) async {
   final service = ref.watch(searchServiceProvider);
-  return await service.searchPlaces(id);
+  return service.getPlaceById(id);
 });
 
 class PlaceDetailsScreen extends ConsumerWidget {
@@ -22,10 +25,12 @@ class PlaceDetailsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final placeName = placeId ?? "Arambagh";
     final placeDetailsAsync = ref.watch(placeDetailsProvider(placeName));
+    // Show the resolved name once it loads — a raw UUID in the app bar is useless.
+    final title = placeDetailsAsync.valueOrNull?.data?.canonicalName ?? 'Place details';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(placeName),
+        title: Text(title),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
@@ -39,11 +44,10 @@ class PlaceDetailsScreen extends ConsumerWidget {
       ),
       body: placeDetailsAsync.when(
         data: (response) {
-          final places = response.data ?? [];
-          if (places.isEmpty) {
+          final place = response.data;
+          if (place == null) {
             return _buildEmptyState(context, placeName);
           }
-          final place = places.first;
           final confidence = response.metadata?.confidenceScore ?? 0.95;
           final sources = response.metadata?.dataSources ?? ['Places Database'];
 
@@ -53,6 +57,32 @@ class PlaceDetailsScreen extends ConsumerWidget {
         error: (err, stack) => _buildErrorState(context, err.toString()),
       ),
     );
+  }
+
+  Future<void> _openProviderSite(BuildContext context, List<String> sources) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final url = _providerSiteFor(sources);
+
+    if (url == null) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('No official website recorded for this provider yet.'),
+      ));
+      return;
+    }
+
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
+    }
+  }
+
+  /// Only returns a URL the API actually supplied — never a guessed one.
+  Uri? _providerSiteFor(List<String> sources) {
+    for (final source in sources) {
+      if (source.startsWith('http://') || source.startsWith('https://')) {
+        return Uri.tryParse(source);
+      }
+    }
+    return null;
   }
 
   Widget _buildContent(BuildContext context, Place place, double confidence, List<String> sources) {
@@ -138,9 +168,13 @@ class PlaceDetailsScreen extends ConsumerWidget {
                   ],
                 )),
                 const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('Open Original Graph Sources'),
+                // Was an empty onPressed — a button that did nothing. The
+                // provider website comes from the providers table, which is
+                // currently unseeded, so say so rather than dead-ending.
+                TextButton.icon(
+                  onPressed: () => _openProviderSite(context, sources),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Open provider website'),
                 )
               ],
             ),

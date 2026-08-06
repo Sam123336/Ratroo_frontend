@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Tokens live in the OS keystore (Android EncryptedSharedPreferences / iOS
@@ -21,8 +22,20 @@ class TokenStore {
 
   Future<void> load() async {
     if (_loaded) return;
-    _accessToken = await _storage.read(key: _accessKey);
-    _refreshToken = await _storage.read(key: _refreshKey);
+
+    try {
+      _accessToken = await _storage.read(key: _accessKey);
+      _refreshToken = await _storage.read(key: _refreshKey);
+    } catch (error) {
+      // The keystore can be unavailable: MissingPluginException after adding the
+      // plugin without a full rebuild, a locked device, or an unsupported
+      // platform. Degrade to "signed out" — a storage problem must never break
+      // public endpoints like search.
+      debugPrint('TokenStore: secure storage unavailable, continuing signed out ($error)');
+      _accessToken = null;
+      _refreshToken = null;
+    }
+
     _loaded = true;
   }
 
@@ -31,18 +44,31 @@ class TokenStore {
   bool get isSignedIn => _refreshToken != null;
 
   Future<void> save({required String accessToken, required String refreshToken}) async {
+    // In-memory first: if persistence fails the session still works until the
+    // app is killed, rather than the sign-in appearing to fail outright.
     _accessToken = accessToken;
     _refreshToken = refreshToken;
     _loaded = true;
-    await _storage.write(key: _accessKey, value: accessToken);
-    await _storage.write(key: _refreshKey, value: refreshToken);
+
+    try {
+      await _storage.write(key: _accessKey, value: accessToken);
+      await _storage.write(key: _refreshKey, value: refreshToken);
+    } catch (error) {
+      debugPrint('TokenStore: could not persist tokens, session is memory-only ($error)');
+    }
   }
 
   Future<void> clear() async {
     _accessToken = null;
     _refreshToken = null;
     _loaded = true;
-    await _storage.delete(key: _accessKey);
-    await _storage.delete(key: _refreshKey);
+
+    try {
+      await _storage.delete(key: _accessKey);
+      await _storage.delete(key: _refreshKey);
+    } catch (error) {
+      // In-memory tokens are already gone, which is what sign-out most needs.
+      debugPrint('TokenStore: could not clear persisted tokens ($error)');
+    }
   }
 }

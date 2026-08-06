@@ -103,7 +103,7 @@ void main() {
   });
 
   test('concurrent 401s share one refresh', () async {
-    final (dio, _, __) = await buildClient();
+    final (dio, _, _) = await buildClient();
 
     // The home screen fires three at once. Refreshing three times would rotate
     // the token out from under the other two and sign the user out.

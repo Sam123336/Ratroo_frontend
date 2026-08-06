@@ -55,8 +55,20 @@ class ApiResponse<T> {
 /// rendering verbatim inside empty states. Map it to one human sentence, and
 /// prefer the server's own message when there is one.
 String friendlyError(DioException e) {
-  final serverMessage = e.response?.data is Map ? e.response?.data['message'] : null;
-  if (serverMessage is String && serverMessage.isNotEmpty) return serverMessage;
+  final body = e.response?.data;
+
+  if (body is Map) {
+    // Our API puts it at the top level; Vercel's SSO block nests it under
+    // `error`. Missing that made a "Protected deployment" 401 read as a wrong
+    // password.
+    final serverMessage = body['message'] ?? (body['error'] is Map ? body['error']['message'] : null);
+    if (serverMessage is String && serverMessage.isNotEmpty) {
+      // Name the culprit — this one is a deploy setting, not anything the user did.
+      return body['protection'] != null
+          ? 'This API is behind Vercel Deployment Protection. Disable it in the Vercel project settings.'
+          : serverMessage;
+    }
+  }
 
   switch (e.type) {
     case DioExceptionType.connectionTimeout:
