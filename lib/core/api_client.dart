@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'auth_interceptor.dart';
 import 'flavors.dart';
+import 'token_store.dart';
 
 class ApiMetadata {
   final double confidenceScore;
@@ -84,10 +86,13 @@ List<dynamic> asList(dynamic data) {
 
 class ApiClient {
   late final Dio _dio;
-  
+
+  final TokenStore tokens;
+
   static String get baseUrl => AppFlavors.apiBaseUrl;
 
-  ApiClient() {
+  ApiClient({TokenStore? tokenStore, void Function()? onSessionExpired})
+      : tokens = tokenStore ?? TokenStore() {
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -95,6 +100,13 @@ class ApiClient {
       headers: {
         'Accept': 'application/json',
       }
+    ));
+
+    // First in the chain: adds the bearer token and transparently refreshes on 401.
+    _dio.interceptors.add(AuthInterceptor(
+      tokens: tokens,
+      dio: _dio,
+      onSessionExpired: onSessionExpired,
     ));
 
     // Optional: Add logging interceptor for debug mode

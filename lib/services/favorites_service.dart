@@ -34,4 +34,18 @@ class FavoritesService {
       return ApiResponse(success: false, error: e.toString());
     }
   }
+
+  Future<ApiResponse<bool>> removeFavorite(String routeId) async {
+    try {
+      final response = await _apiClient.client.delete('/favorites/$routeId');
+      return ApiResponse.fromJson(
+        response.data,
+        (data) => false,
+      );
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: friendlyError(e));
+    } catch (e) {
+      return ApiResponse(success: false, error: e.toString());
+    }
+  }
 }
