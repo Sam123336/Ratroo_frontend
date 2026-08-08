@@ -60,6 +60,34 @@ void main() {
     expect(find.textContaining('Geo Located'), findsNothing);
   });
 
+  testWidgets('leads with the name painted on the bus when we know it', (tester) async {
+    await tester.pumpWidget(harness(placeWith(const [
+      Departure(
+        time: '09:15',
+        routeId: 'r9',
+        routeName: 'WBBus service 671',
+        headsign: 'Kolkata (Esplanade)',
+        operator: 'ABIR SUPER',
+        vehicle: 'WB05C4556',
+        timeSource: 'SCRAPED',
+      ),
+    ])));
+    await tester.pumpAndSettle();
+
+    // At a West Bengal stand you board "ABIR SUPER", not "WBBus service 671".
+    expect(find.text('ABIR SUPER \u00b7 WB05C4556'), findsOneWidget);
+    expect(find.text('To Kolkata (Esplanade)'), findsOneWidget);
+  });
+
+  testWidgets('falls back to the route name when no bus name was recorded', (tester) async {
+    await tester.pumpWidget(harness(placeWith(const [
+      Departure(time: '09:15', routeId: 'r9', routeName: 'WBBus service 671', headsign: 'Digha'),
+    ])));
+    await tester.pumpAndSettle();
+
+    expect(find.text('WBBus service 671'), findsOneWidget);
+  });
+
   testWidgets('marks an interpolated time as estimated rather than passing it off', (tester) async {
     await tester.pumpWidget(harness(placeWith(const [
       Departure(

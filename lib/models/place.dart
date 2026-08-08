@@ -8,6 +8,14 @@ class Departure {
   /// Where the service is headed — the last stop on its trip.
   final String? headsign;
 
+  /// The name painted on the bus, e.g. "APANJAN" — how West Bengal's private
+  /// services are actually identified at the stand. Null when unrecorded,
+  /// which is most of them.
+  final String? operator;
+
+  /// Its registration, e.g. "WB67D5949".
+  final String? vehicle;
+
   /// SCRAPED (published by the operator) or INTERPOLATED (estimated between
   /// two known times). Shown to the user, because an estimate is not a promise.
   final String? timeSource;
@@ -17,8 +25,18 @@ class Departure {
     required this.routeId,
     required this.routeName,
     this.headsign,
+    this.operator,
+    this.vehicle,
     this.timeSource,
   });
+
+  /// "APANJAN · WB67D5949", or null when the operator was never recorded.
+  String? get busLabel {
+    final name = operator?.trim();
+    if (name == null || name.isEmpty) return null;
+    final reg = vehicle?.trim();
+    return reg == null || reg.isEmpty ? name : '$name · $reg';
+  }
 
   bool get isEstimated => timeSource == 'INTERPOLATED';
 
@@ -38,6 +56,8 @@ class Departure {
       routeId: json['routeId'] as String? ?? '',
       routeName: json['routeName'] as String? ?? 'Unnamed service',
       headsign: json['headsign'] as String?,
+      operator: json['operator'] as String?,
+      vehicle: json['vehicle'] as String?,
       timeSource: json['timeSource'] as String?,
     );
   }
@@ -50,6 +70,33 @@ class PlaceRoute {
   final String providerCode;
 
   const PlaceRoute({required this.id, required this.name, required this.providerCode});
+
+  /// A label short enough for a chip in a list row.
+  ///
+  /// Most names are one of two shapes: "WBBus service 135", where the number
+  /// is the only part a rider uses, or "KOLKATA to DIGHA", where the other end
+  /// is. Anything else is shown as-is and ellipsised.
+  ///
+  /// [at] is the stop the row belongs to. Without it, "Bishnupur - Kolkata"
+  /// listed at the Kolkata stop labelled itself "Kolkata" — telling a rider
+  /// standing there that the bus goes where they already are.
+  String shortLabelAt([String? at]) {
+    final service = RegExp(r'(?:service|route)\s+([A-Za-z0-9/\-]+)\s*$', caseSensitive: false)
+        .firstMatch(name);
+    if (service != null) return service.group(1)!;
+
+    final parts = name.split(RegExp(r'\s+(?:to|-|–|→)\s+')).map((p) => p.trim()).toList();
+    if (parts.length != 2 || parts.any((p) => p.isEmpty)) return name;
+
+    String key(String value) => value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final here = at == null ? null : key(at);
+
+    // The end that is not this stop. Falls back to the destination when the
+    // row has no stop name or neither end matches it.
+    if (here != null && key(parts.first) == here) return parts.last;
+    if (here != null && key(parts.last) == here) return parts.first;
+    return parts.last;
+  }
 
   factory PlaceRoute.fromJson(Map<String, dynamic> json) => PlaceRoute(
         id: json['id'] as String? ?? '',
@@ -121,15 +168,27 @@ class Place {
   }
 
   /// The stored enum spelled for a person. The UI used to print BUS_STOP.
+  ///
+  /// /v1/stops/nearby builds the category as `<routeType>_STOP`, so the live
+  /// values are BUS_STOP, RAIL_STOP, FERRY_STOP and TRAM_STOP. Those were all
+  /// falling through to "Transit stop" — a tram stop read as generic.
   String get readableType {
     switch (type) {
       case 'BUS_STOP':
-      case 'STOP':
         return 'Bus stop';
+      // The generic type stored on places. It used to be read as "Bus stop",
+      // which labelled tram stops and ferry ghats as buses.
+      case 'STOP':
+        return 'Transit stop';
+      case 'FERRY_STOP':
       case 'FERRY_GHAT':
         return 'Ferry ghat';
+      case 'TRAM_STOP':
+        return 'Tram stop';
+      case 'METRO_STOP':
       case 'METRO_STATION':
         return 'Metro station';
+      case 'RAIL_STOP':
       case 'RAIL_STATION':
         return 'Railway station';
       default:

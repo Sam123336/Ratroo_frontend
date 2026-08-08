@@ -6,9 +6,15 @@ import 'package:google_fonts/google_fonts.dart';
 /// brand change is a one-file change.
 class RatrooTheme {
   // ---- Brand -------------------------------------------------------------
-  static const Color primaryColor = Color(0xFF2F6BFF); // Ratroo Blue
-  static const Color primaryDeep = Color(0xFF1B4BD8); // pressed / gradients
-  static const Color accentColor = Color(0xFF00B95C); // Confidence Green
+  // Transit blue carries structure — route lines, active nav, primary actions.
+  // Orange is the brand mark's colour and is reserved for things that want a
+  // tap: CTAs, live badges, the selected mode. Using it for anything else
+  // spends the only colour that stands out.
+  static const Color primaryColor = Color(0xFF2563EB); // Transit Blue
+  static const Color primaryDeep = Color(0xFF1D4ED8); // pressed / gradients
+  static const Color accentColor = Color(0xFFEA580C); // Ratroo Orange
+  static const Color accentDeep = Color(0xFFC2410C); // pressed
+  static const Color secondaryColor = Color(0xFF0891B2); // secondary lines/legs
 
   // ---- Confidence scale --------------------------------------------------
   // `*Fill` for gauges/badges on any background; `*Text` is the darkened pair
@@ -32,9 +38,23 @@ class RatrooTheme {
   static const Color darkSurface = Color(0xFF1C1F26);
   static const Color darkSurfaceVariant = Color(0xFF282C35);
 
-  static const Color lightBackground = Color(0xFFF5F7FB);
+  static const Color lightBackground = Color(0xFFF8FAFC);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceVariant = Color(0xFFEAEEF6);
+  static const Color lightSurfaceVariant = Color(0xFFF1F5FD);
+
+  /// Per-mode colour for route lines, leg bars and mode dots. Keyed by the
+  /// API's routeType so it matches `<routeType>_STOP` categories elsewhere.
+  static const Map<String, Color> modeColors = {
+    'bus': primaryColor,
+    'rail': Color(0xFF7C3AED),
+    'ferry': secondaryColor,
+    'tram': Color(0xFFDB2777),
+    'metro': Color(0xFF059669),
+    'walk': Color(0xFF64748B),
+  };
+
+  static Color modeColor(String? mode) =>
+      modeColors[mode?.toLowerCase()] ?? primaryColor;
 
   // ---- Scales ------------------------------------------------------------
   static const double radiusSm = 12;
@@ -214,6 +234,8 @@ class RatrooTheme {
           onPrimary: Colors.white,
           secondary: accentColor,
           onSecondary: Colors.white,
+          tertiary: secondaryColor,
+          onTertiary: Colors.white,
           surface: darkSurface,
           onSurface: Color(0xFFEDF0F6),
           surfaceContainerHighest: darkSurfaceVariant,
@@ -228,10 +250,13 @@ class RatrooTheme {
           onPrimary: Colors.white,
           secondary: accentColor,
           onSecondary: Colors.white,
+          tertiary: secondaryColor,
+          onTertiary: Colors.white,
           surface: lightSurface,
-          onSurface: Color(0xFF11161F),
+          // Slate 900 — the mockups' near-black, 16:1 on white.
+          onSurface: Color(0xFF0F172A),
           surfaceContainerHighest: lightSurfaceVariant,
-          outline: Color(0xFFD3DAE8),
+          outline: Color(0xFFE4ECFC),
         ),
         lightBackground,
       );

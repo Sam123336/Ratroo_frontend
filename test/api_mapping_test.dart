@@ -83,6 +83,8 @@ void main() {
           'routeName': 'WBBus service 135',
           'timeSource': 'SCRAPED',
           'headsign': 'Tatanagar',
+          'operator': 'ABIR SUPER',
+          'vehicle': 'WB05C4556',
         },
         {
           'time': '14:05',
@@ -99,6 +101,10 @@ void main() {
 
     expect(place.routes.single.name, 'WBBus service 135');
     expect(place.departures.first.headsign, 'Tatanagar');
+    // The name on the bus, which is how riders identify it at the stand.
+    expect(place.departures.first.busLabel, 'ABIR SUPER · WB05C4556');
+    // Most trips have no operator recorded; the row falls back to the route.
+    expect(place.departures.last.busLabel, isNull);
     expect(place.departures.first.isEstimated, isFalse);
     expect(place.departures.last.isEstimated, isTrue);
     expect(place.sources.single.website, isNull);
@@ -156,5 +162,36 @@ void main() {
 
     expect(route.title, 'AANI: from Chittaranjan');
     expect(route.providerWebsite, isNull);
+  });
+
+  test('elapsed minutes count from the origin, wrapping past midnight', () {
+    final route = RouteModel.fromJson({
+      'id': 'r1',
+      'longName': 'Bandwan - Kolkata (Esplanade)',
+      'providerCode': 'WBBUS',
+      'stops': [
+        {'name': 'Bandwan', 'stopSequence': 1, 'departureTime': '19:20'},
+        {'name': 'Manbazar', 'stopSequence': 2, 'departureTime': '20:40'},
+        {'name': 'No time here', 'stopSequence': 3, 'departureTime': null},
+        // Overnight service: 00:20 is 5h after 19:20, not minus 19 hours.
+        {'name': 'Kolkata (Esplanade)', 'stopSequence': 4, 'departureTime': '00:20'},
+      ],
+    });
+
+    expect(route.elapsedMinutes, [0, 80, null, 300]);
+  });
+
+  test('elapsed minutes are all null when the origin has no time', () {
+    final route = RouteModel.fromJson({
+      'id': 'r2',
+      'providerCode': 'WBTC',
+      'stops': [
+        {'name': 'A', 'stopSequence': 1, 'departureTime': null},
+        {'name': 'B', 'stopSequence': 2, 'departureTime': '09:00'},
+      ],
+    });
+
+    // Without a start there is nothing to measure from, so no number is shown.
+    expect(route.elapsedMinutes, [null, null]);
   });
 }

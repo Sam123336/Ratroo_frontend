@@ -87,24 +87,28 @@ class LocationService {
       }
 
       // A recent last-known fix is instant and good enough for "what's nearby".
-      // An old one is worse than none — it can be from another city entirely.
       final cached = await Geolocator.getLastKnownPosition();
-      final position = _usable(cached)
-          ? cached!
-          : await Geolocator.getCurrentPosition(
-              locationSettings: const LocationSettings(
-                accuracy: LocationAccuracy.medium,
-                timeLimit: Duration(seconds: 12),
-              ),
-            );
+      if (_usable(cached)) return _remember(_live(cached!));
 
-      return _remember(UserLocation(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        status: LocationStatus.live,
-      ));
+      try {
+        return _remember(_live(await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 12),
+          ),
+        )));
+      } catch (error) {
+        // No fresh fix. An old real position still beats Kolkata centre — it is
+        // where the user last was, which is usually where they still are.
+        // Discarding it for a hardcoded city was why "Retry" kept answering
+        // "could not get your location" on a device that had a position all
+        // along.
+        debugPrint('LocationService: no fresh fix ($error)');
+        if (cached != null) return _remember(_live(cached));
+        rethrow;
+      }
     } catch (error) {
-      debugPrint('LocationService: no fix ($error)');
+      debugPrint('LocationService: no fix at all ($error)');
       return _remember(_fallbackWith(LocationStatus.unavailable));
     }
   }
@@ -116,6 +120,12 @@ class LocationService {
         latitude: UserLocation.fallback.latitude,
         longitude: UserLocation.fallback.longitude,
         status: status,
+      );
+
+  static UserLocation _live(Position position) => UserLocation(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        status: LocationStatus.live,
       );
 
   /// A last-known fix is only worth using while it is recent.

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../providers/api_providers.dart';
+import '../models/coverage_summary.dart';
 import '../models/place.dart';
 import '../models/route.dart';
 import '../core/theme.dart';
@@ -43,9 +44,28 @@ final homeSavedRoutesProvider = FutureProvider.autoDispose<ApiResponse<List<Rout
   return service.getFavorites();
 });
 
-// Fetch system confidence/reliability
-final homeRouteCountProvider = FutureProvider.autoDispose<ApiResponse<int>>((ref) async {
-  return ref.watch(transitServiceProvider).getRouteCount();
+/// Label per route type the API can report. "rail" is shown as "Train"
+/// because that is what people call it; the key stays the API's word.
+///
+/// Modes with a photo in assets/brand show it; the rest fall back to an icon.
+/// Metro has no photo because it has no data either — it never renders.
+const _modeChips = <String, (IconData, String)>{
+  'bus': (Icons.directions_bus, 'Bus'),
+  'rail': (Icons.train, 'Train'),
+  'ferry': (Icons.directions_boat, 'Ferry'),
+  'tram': (Icons.tram, 'Tram'),
+  'metro': (Icons.subway, 'Metro'),
+};
+
+const _modePhotos = {'bus', 'rail', 'ferry', 'tram'};
+
+/// Coverage where the user actually is, not a fixed West Bengal claim.
+final homeCoverageProvider =
+    FutureProvider.autoDispose<ApiResponse<CoverageSummary>>((ref) async {
+  final location = await ref.watch(userLocationProvider.future);
+  return ref
+      .watch(transitServiceProvider)
+      .getCoverageSummary(location.latitude, location.longitude);
 });
 
 /// Shown when the device has moved away from the position the screen was built
@@ -111,7 +131,7 @@ class HomeScreen extends ConsumerWidget {
             ref.invalidate(userLocationProvider);
             ref.invalidate(homeNearbyStationsProvider);
             ref.invalidate(homeSavedRoutesProvider);
-            ref.invalidate(homeRouteCountProvider);
+            ref.invalidate(homeCoverageProvider);
           },
           child: ListView(
             padding: const EdgeInsets.all(24.0),
@@ -119,6 +139,8 @@ class HomeScreen extends ConsumerWidget {
               _buildHeader(context, ref),
               const SizedBox(height: 24),
               _buildSearchBar(context),
+              const SizedBox(height: 28),
+              _buildQuickAccess(context),
               const SizedBox(height: 32),
               _buildNearbySection(context, ref),
               const SizedBox(height: 32),
@@ -131,6 +153,20 @@ class HomeScreen extends ConsumerWidget {
       ),
       bottomNavigationBar: _buildBottomNav(context),
     );
+  }
+
+  /// Names only the modes that actually have routes in the region, and stays
+  /// vague while the answer is still loading rather than guessing.
+  String _subtitle(WidgetRef ref) {
+    final coverage = ref.watch(homeCoverageProvider).valueOrNull?.data;
+    if (coverage == null || !coverage.hasCoverage) {
+      return 'Real timetables from the operators themselves.';
+    }
+
+    final modes = coverage.modesSentence;
+    return modes.isEmpty
+        ? 'Transit across ${coverage.region}.'
+        : '$modes across ${coverage.region}.';
   }
 
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
@@ -173,7 +209,10 @@ class HomeScreen extends ConsumerWidget {
         ).animate().fadeIn().slideY(begin: -0.2, end: 0),
         const SizedBox(height: 8),
         Text(
-          'Live bus, metro, rail and ferry across West Bengal.',
+          // Was "Live bus, metro, rail and ferry across West Bengal" for
+          // everyone — wrong in Karnataka, and wrong about metro everywhere,
+          // since no metro routes are mapped at all.
+          _subtitle(ref),
           style: GoogleFonts.inter(
             fontSize: 16,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -185,6 +224,30 @@ class HomeScreen extends ConsumerWidget {
         ],
       ],
     );
+  }
+
+  /// Four ways into the app that are otherwise buried. Every destination here
+  /// is a screen backed by real data — no placeholders for features that do
+  /// not exist yet.
+  Widget _buildQuickAccess(BuildContext context) {
+    const items = [
+      (Icons.near_me_outlined, 'Nearby\nStops', '/nearby'),
+      (Icons.alt_route_outlined, 'Plan a\nJourney', '/journey-planner'),
+      (Icons.business_outlined, 'Operators', '/providers'),
+      (Icons.auto_awesome_outlined, 'Ask\nRatroo', '/assistant'),
+    ];
+
+    return Row(
+      children: [
+        for (final item in items)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _QuickAccessTile(icon: item.$1, label: item.$2, route: item.$3),
+            ),
+          ),
+      ],
+    ).animate().fadeIn(delay: 250.ms).slideY(begin: 0.1, end: 0);
   }
 
   Widget _buildSearchBar(BuildContext context) {
@@ -263,13 +326,30 @@ class HomeScreen extends ConsumerWidget {
                 message: 'No nearby stations found.',
               );
             }
+            // Only the modes that actually run here. This row was a fixed
+            // Bus/Ferry/Train/Metro — in Karnataka three of the four opened an
+            // empty list, and Metro opened one everywhere, since no metro
+            // route or stop has ever been ingested.
+            final modes = ref.watch(homeCoverageProvider).valueOrNull?.data?.modes ?? const [];
+            final chips = _modeChips.entries.where((e) => modes.contains(e.key)).toList();
+
+            if (chips.isEmpty) {
+              return Text(
+                'No services mapped around you yet.',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              );
+            }
+
             return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: chips.length < 3
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.spaceBetween,
               children: [
-                _buildTransitMode(context, Icons.directions_bus, 'Bus'),
-                _buildTransitMode(context, Icons.directions_boat, 'Ferry'),
-                _buildTransitMode(context, Icons.train, 'Train'),
-                _buildTransitMode(context, Icons.subway, 'Metro'),
+                for (final chip in chips)
+                  _buildTransitMode(context, chip.value.$1, chip.value.$2, chip.key),
               ],
             );
           },
@@ -283,26 +363,44 @@ class HomeScreen extends ConsumerWidget {
     ).animate().fadeIn(delay: 300.ms);
   }
 
-  Widget _buildTransitMode(BuildContext context, IconData icon, String label) {
+  /// The tinted circle used before photos, kept for modes without one.
+  Widget _modeGlyph(ThemeData theme, IconData icon) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: theme.colorScheme.primary, size: 28),
+      );
+
+  Widget _buildTransitMode(BuildContext context, IconData icon, String label, String mode) {
     final theme = Theme.of(context);
 
     // These were decoration — no tap handler at all. Each now opens Nearby
     // filtered to that mode.
     return InkWell(
-      onTap: () => context.push('/nearby?mode=${label.toUpperCase()}'),
+      onTap: () => context.push('/nearby?mode=${mode.toUpperCase()}'),
       borderRadius: BorderRadius.circular(RatrooTheme.radiusMd),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: theme.colorScheme.primary, size: 28),
-            ),
+            if (_modePhotos.contains(mode))
+              // A photograph of the actual vehicle reads faster than a glyph,
+              // and a Kolkata tram looks nothing like a generic tram icon.
+              ClipOval(
+                child: Image.asset(
+                  'assets/brand/mode_$mode.jpg',
+                  width: 62,
+                  height: 62,
+                  fit: BoxFit.cover,
+                  semanticLabel: label,
+                  // A missing or corrupt asset must not take the row down.
+                  errorBuilder: (_, _, _) => _modeGlyph(theme, icon),
+                ),
+              )
+            else
+              _modeGlyph(theme, icon),
             const SizedBox(height: 8),
             Text(
               label,
@@ -354,7 +452,7 @@ class HomeScreen extends ConsumerWidget {
   /// the figure never changed and measured nothing. A route count is a fact we
   /// actually hold.
   Widget _buildTransitReliability(BuildContext context, WidgetRef ref) {
-    final countAsync = ref.watch(homeRouteCountProvider);
+    final countAsync = ref.watch(homeCoverageProvider);
     final theme = Theme.of(context);
 
     return Column(
@@ -371,12 +469,16 @@ class HomeScreen extends ConsumerWidget {
         const SizedBox(height: 16),
         countAsync.when(
           data: (response) {
-            final count = response.data;
-            if (count == null) {
+            final coverage = response.data;
+            if (coverage == null || !coverage.hasCoverage) {
               return GlassContainer(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Could not load coverage right now.',
+                  // Distinguishes "we have nothing here" from "the request
+                  // failed" — both used to read as a loading error.
+                  coverage == null
+                      ? 'Could not load coverage right now.'
+                      : 'No routes are mapped around you yet.',
                   style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.onSurface),
                 ),
               );
@@ -393,7 +495,7 @@ class HomeScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '$count routes mapped',
+                          '${coverage.routeCount} routes in ${coverage.region}',
                           style: GoogleFonts.outfit(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -402,7 +504,7 @@ class HomeScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Bus, metro, rail and ferry across West Bengal. '
+                          '${coverage.modesSentence}. '
                           'Not every route has a published timetable yet.',
                           style: GoogleFonts.inter(
                             fontSize: 13,
@@ -603,16 +705,18 @@ class HomeScreen extends ConsumerWidget {
       selectedIndex: 2,
       onDestinationSelected: (index) {
         // Was a hardcoded route uuid that 404s once that row is reprojected.
-        if (index == 0) context.push('/nearby');
-        if (index == 1) context.push('/journey-planner');
+        if (index == 0) context.push('/journey-planner');
+        // Search opened the Journey Planner, so there was no way to look up a
+        // single stop by name. It now opens stop search.
+        if (index == 1) context.push('/search');
         if (index == 3) context.push('/nearby');
         if (index == 4) context.push('/profile');
       },
       destinations: const [
         NavigationDestination(
-          icon: Icon(Icons.route_outlined),
-          selectedIcon: Icon(Icons.route),
-          label: 'Routes',
+          icon: Icon(Icons.alt_route_outlined),
+          selectedIcon: Icon(Icons.alt_route),
+          label: 'Plan',
         ),
         NavigationDestination(
           icon: Icon(Icons.search_outlined),
@@ -635,6 +739,52 @@ class HomeScreen extends ConsumerWidget {
           label: 'Profile',
         ),
       ],
+    );
+  }
+}
+
+/// One Quick Access square: icon over a two-line label, whole tile tappable.
+class _QuickAccessTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String route;
+
+  const _QuickAccessTile({required this.icon, required this.label, required this.route});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: () => context.push(route),
+      borderRadius: BorderRadius.circular(RatrooTheme.radiusMd),
+      child: Container(
+        // 88 high keeps the whole square well past the 48dp touch minimum.
+        height: 88,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(RatrooTheme.radiusMd),
+          border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 22, color: theme.colorScheme.primary),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface,
+                letterSpacing: 0,
+                height: 1.25,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

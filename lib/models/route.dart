@@ -18,6 +18,15 @@ class RouteStop {
 
   bool get hasPosition => lat != null && lon != null;
 
+  /// Minutes since midnight, or null when no time is published.
+  int? get minutesOfDay {
+    final parts = (departureTime ?? '').split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    return (h == null || m == null) ? null : h * 60 + m;
+  }
+
   factory RouteStop.fromJson(Map<String, dynamic> json) => RouteStop(
         name: json['name'] as String? ?? 'Unnamed stop',
         sequence: (json['stopSequence'] as num?)?.toInt() ?? 0,
@@ -75,6 +84,24 @@ class RouteModel {
     if (longName.trim().isNotEmpty) return longName.trim();
     if (originName != null) return 'From $originName';
     return routeCode.isEmpty ? 'Route' : routeCode;
+  }
+
+  /// Minutes from the first stop to each stop, or null where either end has no
+  /// published time. Wraps midnight, since overnight services are common here.
+  ///
+  /// This is elapsed time along the route — "25 mins" against Pursurah means
+  /// 25 minutes after boarding at the origin, which is what the reference
+  /// board shows and what a rider actually wants.
+  List<int?> get elapsedMinutes {
+    final start = stops.isEmpty ? null : stops.first.minutesOfDay;
+    if (start == null) return List.filled(stops.length, null);
+
+    return stops.map((stop) {
+      final at = stop.minutesOfDay;
+      if (at == null) return null;
+      final delta = at - start;
+      return delta < 0 ? delta + 24 * 60 : delta;
+    }).toList();
   }
 
   /// Points to draw, in order. Empty when too few stops are geolocated.

@@ -89,4 +89,52 @@ void main() {
       expect(driftedTo(null, bengaluru), isNull);
     });
   });
+
+  group('readableType covers the categories the API actually sends', () {
+    // /v1/stops/nearby builds these as "<routeType>_STOP".
+    String typed(String? category) => Place.fromJson({'id': 'x', 'category': category}).readableType;
+
+    test('names each mode instead of a generic transit stop', () {
+      expect(typed('BUS_STOP'), 'Bus stop');
+      expect(typed('TRAM_STOP'), 'Tram stop');
+      expect(typed('FERRY_STOP'), 'Ferry ghat');
+      expect(typed('RAIL_STOP'), 'Railway station');
+    });
+
+    test('falls back only for a category we do not know', () {
+      expect(typed('SOMETHING_ELSE'), 'Transit stop');
+      expect(typed(null), 'Transit stop');
+    });
+  });
+
+  group('PlaceRoute.shortLabel keeps a list row readable', () {
+    String label(String name, [String? at]) =>
+        PlaceRoute.fromJson({'id': 'r', 'name': name}).shortLabelAt(at);
+
+    test('pulls the service number out, which is all a rider uses', () {
+      expect(label('WBBus service 135'), '135');
+      expect(label('WBBus service 10B'), '10B');
+    });
+
+    test('names the far end, not the stop the rider is standing at', () {
+      // Listed at the Kolkata stop, both directions must read "Bishnupur".
+      expect(label('Bishnupur - Kolkata', 'Kolkata'), 'Bishnupur');
+      expect(label('Kolkata - Bishnupur', 'Kolkata'), 'Bishnupur');
+      expect(label('KOLKATA to DIGHA', 'KOLKATA'), 'DIGHA');
+      // Match ignores case and punctuation, so "KOLKATA" matches "Kolkata".
+      expect(label('Bishnupur - Kolkata', 'kolkata'), 'Bishnupur');
+    });
+
+    test('falls back to the destination without a stop to compare against', () {
+      expect(label('KOLKATA to DIGHA'), 'DIGHA');
+      expect(label('Ariadaha → Kundghat'), 'Kundghat');
+      expect(label('Bishnupur - Kolkata', 'Somewhere Else'), 'Kolkata');
+    });
+
+    test('leaves anything else alone rather than mangling it', () {
+      expect(label('Airport Shuttle'), 'Airport Shuttle');
+      // Two separators are ambiguous, so the name survives intact.
+      expect(label('A to B to C'), 'A to B to C');
+    });
+  });
 }

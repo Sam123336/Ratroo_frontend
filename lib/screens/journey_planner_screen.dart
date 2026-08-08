@@ -4,11 +4,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/api_providers.dart';
 import '../models/journey.dart';
+import '../widgets/journey_card.dart';
+import '../core/transit_icons.dart';
 import '../models/place.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
-import '../widgets/confidence_gauge.dart';
 
 // State providers for search input and focus
 final fromSearchQueryProvider = StateProvider<String>((ref) => '');
@@ -237,11 +238,11 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
             final place = places[index];
             return ListTile(
               leading: Icon(
-                place.type == 'BUS_STOP' ? Icons.directions_bus : Icons.place,
+                modeIcon(place.type),
                 color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
               ),
               title: Text(place.canonicalName),
-              subtitle: Text(place.type ?? 'Transit Location'),
+              subtitle: Text(place.readableType),
               onTap: () {
                 if (field == 'from') {
                   _fromController.text = place.canonicalName;
@@ -292,153 +293,24 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
   }
 
   Widget _buildPlansList(List<JourneyPlanModel> plans, double confidenceScore) {
+    // Each option is a JourneyCard: duration, fare and transfers on top, then
+    // the legs. The old card printed "Free / N/A" whenever the fare was 0,
+    // which reads as a free bus rather than a missing price.
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(RatrooTheme.space4),
       itemCount: plans.length,
       itemBuilder: (context, index) {
-        final plan = plans[index];
-        
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: InkWell(
-            onTap: () {
-              final transitLegs = plan.legs.where((leg) => leg.routeId != null);
-              if (transitLegs.isNotEmpty) {
-                final routeId = transitLegs.first.routeId!;
-                context.push('/route-details?id=$routeId');
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No route details available for walk-only legs.')),
-                );
-              }
-            },
-            borderRadius: BorderRadius.circular(24),
-            child: GlassContainer(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.access_time, size: 20, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${(plan.totalDurationSeconds / 60).round()} min',
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        plan.totalFare > 0 ? '₹${plan.totalFare.toStringAsFixed(0)}' : 'Free / N/A',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Visual multimodal timeline sequence
-                  _buildTimelineSequence(plan.legs),
-                  
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
-                    child: Divider(),
-                  ),
-                  
-                  Row(
-                    children: [
-                      const Icon(Icons.verified, size: 14, color: Colors.blue),
-                      const SizedBox(width: 4),
-                      // Expanded + ellipsis: long service names ("KOLKATA to
-                      // ARAMBAG (NS)") pushed the gauge off-screen and the row
-                      // overflowed by 11px.
-                      Expanded(
-                        child: Text(
-                          _getProvenanceName(plan.legs),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ConfidenceGauge(score: confidenceScore),
-                    ],
-                  )
-                ],
-              ),
-            ),
-          ).animate().fadeIn(delay: (index * 150).ms).slideY(begin: 0.1, end: 0),
-        );
+        return JourneyCard(plan: plans[index], isBest: index == 0)
+            .animate()
+            .fadeIn(delay: (index * 90).ms)
+            .slideY(begin: 0.08, end: 0);
       },
     );
   }
 
-  Widget _buildTimelineSequence(List<JourneyLegModel> legs) {
-    return Row(
-      children: legs.map((leg) {
-        final isLast = leg == legs.last;
-        return Expanded(
-          flex: isLast ? 0 : 1,
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _getModeColor(leg.mode).withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(_getModeIcon(leg.mode), color: _getModeColor(leg.mode), size: 20),
-              ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    height: 2,
-                    color: Colors.grey.withValues(alpha: 0.3),
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
 
-  IconData _getModeIcon(String mode) {
-    switch (mode.toUpperCase()) {
-      case 'BUS':
-        return Icons.directions_bus;
-      case 'FERRY':
-        return Icons.directions_boat;
-      case 'METRO':
-        return Icons.subway;
-      case 'WALK':
-      default:
-        return Icons.directions_walk;
-    }
-  }
 
-  Color _getModeColor(String mode) {
-    switch (mode.toUpperCase()) {
-      case 'BUS':
-        return Colors.blue;
-      case 'FERRY':
-        return Colors.cyan;
-      case 'METRO':
-        return Colors.purple;
-      case 'WALK':
-      default:
-        return Colors.grey;
-    }
-  }
 
-  String _getProvenanceName(List<JourneyLegModel> legs) {
-    final activeLegs = legs.where((l) => l.routeCode != null);
-    if (activeLegs.isEmpty) return 'Walk Journey';
-    return 'Sources: ${activeLegs.map((l) => l.routeCode).toSet().join(", ")}';
-  }
 
   Widget _buildShimmerLoading() {
     return ListView.builder(

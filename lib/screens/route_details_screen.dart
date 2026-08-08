@@ -121,7 +121,7 @@ class _RouteBody extends ConsumerWidget {
                   style: theme.textTheme.bodyMedium,
                 )
               else
-                _StopsTimeline(stops: route.stops),
+                _StopsTimeline(stops: route.stops, elapsed: route.elapsedMinutes),
               const SizedBox(height: RatrooTheme.space4),
               Text(
                 timed == 0
@@ -240,7 +240,20 @@ class _RouteMap extends StatelessWidget {
 class _StopsTimeline extends StatelessWidget {
   final List<RouteStop> stops;
 
-  const _StopsTimeline({required this.stops});
+  /// Minutes from the first stop, aligned to [stops]. Null where unknown.
+  final List<int?> elapsed;
+
+  const _StopsTimeline({required this.stops, required this.elapsed});
+
+  /// "Start", "10 mins", "1h 45m" — the trailing column on the board.
+  static String? _elapsedLabel(int? minutes, bool isFirst) {
+    if (isFirst) return 'Start';
+    if (minutes == null) return null;
+    if (minutes < 60) return '$minutes mins';
+    final hours = minutes ~/ 60;
+    final rest = minutes % 60;
+    return rest == 0 ? '${hours}h' : '${hours}h ${rest}m';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +286,26 @@ class _StopsTimeline extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.only(
                         left: RatrooTheme.space3, bottom: RatrooTheme.space4),
-                    child: Text(stops[i].name, style: theme.textTheme.bodyLarge),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(stops[i].name, style: theme.textTheme.bodyLarge),
+                        ),
+                        // Elapsed time from the origin, so a rider can see how
+                        // far along the route a stop is without doing the
+                        // clock arithmetic themselves.
+                        Builder(builder: (context) {
+                          final label = _elapsedLabel(
+                              i < elapsed.length ? elapsed[i] : null, i == 0);
+                          if (label == null) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(left: RatrooTheme.space3),
+                            child: Text(label, style: theme.textTheme.labelMedium),
+                          );
+                        }),
+                      ],
+                    ),
                   ),
                 ),
               ],

@@ -2,6 +2,8 @@
 """Derive the app's icon assets from the master logo.
 
     python3 tool/build_brand_assets.py ~/Ratroo.png
+    python3 tool/build_brand_assets.py modes bus=~/Bus.png rail=~/Rail.png \
+        ferry=~/ferry.png tram=~/term.png
 
 The master is a 1254x1254 PNG with no alpha channel, so everything outside the
 rounded square is solid black. Shipping that as the launcher icon puts black
@@ -33,6 +35,8 @@ SIZE = 1024
 # Android scales the adaptive foreground by 1.5x, so the mark must sit inside
 # the middle ~66% or it gets cropped.
 SAFE_ZONE = 0.46
+# Mode thumbnails render at 64pt; 256px covers 3x screens.
+MODE_SIZE = 256
 
 OUT = Path(__file__).resolve().parent.parent / 'assets' / 'brand'
 
@@ -88,9 +92,41 @@ def to_transparent(image: Image.Image) -> Image.Image:
     return result
 
 
+def build_modes(pairs: list[str]) -> None:
+    """Square thumbnails for the home screen's mode buttons.
+
+        python3 tool/build_brand_assets.py modes bus=~/Bus.png tram=~/term.png
+
+    The source photos are 1.5-2.5 MB each. They are centre-cropped to a square
+    and written as small JPEGs, because bundling the originals would add ~8 MB
+    to the app for four circles 64 points wide.
+    """
+    OUT.mkdir(parents=True, exist_ok=True)
+
+    for pair in pairs:
+        mode, _, source = pair.partition('=')
+        if not source:
+            raise SystemExit(f'Expected mode=path, got {pair!r}')
+
+        photo = Image.open(Path(source).expanduser()).convert('RGB')
+        side = min(photo.size)
+        left = (photo.width - side) // 2
+        top = (photo.height - side) // 2
+        square = photo.crop((left, top, left + side, top + side))
+        square = square.resize((MODE_SIZE, MODE_SIZE), Image.LANCZOS)
+
+        target = OUT / f'mode_{mode}.jpg'
+        square.save(target, 'JPEG', quality=85, optimize=True)
+        print(f'  {target.name}: {MODE_SIZE}x{MODE_SIZE} ({target.stat().st_size // 1024} KB)')
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
+
+    if sys.argv[1] == 'modes':
+        build_modes(sys.argv[2:])
+        return
 
     master = Image.open(Path(sys.argv[1]).expanduser())
     OUT.mkdir(parents=True, exist_ok=True)

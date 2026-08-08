@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/api_providers.dart';
 import '../models/place.dart';
 import '../core/location_service.dart';
+import '../core/transit_icons.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
 
@@ -118,7 +119,7 @@ class _PlaceBody extends ConsumerWidget {
         if (place.routes.isEmpty)
           Text('No routes are recorded here yet.', style: theme.textTheme.bodyMedium)
         else
-          ...place.routes.map((r) => _RouteTile(route: r)),
+          ...place.routes.map((r) => _RouteTile(route: r, category: place.type)),
         const SizedBox(height: RatrooTheme.space6),
         _sources(context, theme),
       ],
@@ -141,7 +142,7 @@ class _PlaceBody extends ConsumerWidget {
           runSpacing: RatrooTheme.space2,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            _Chip(icon: Icons.directions_bus, label: _readableType(place.type)),
+            _Chip(icon: modeIcon(place.type), label: place.readableType),
             if (distance != null) _Chip(icon: Icons.near_me, label: distance),
             if (place.lat != null && place.lon != null)
               ActionChip(
@@ -163,22 +164,6 @@ class _PlaceBody extends ConsumerWidget {
     return metres < 1000
         ? '${metres.round()} m away'
         : '${(metres / 1000).toStringAsFixed(1)} km away';
-  }
-
-  String _readableType(String? type) {
-    switch (type) {
-      case 'BUS_STOP':
-      case 'STOP':
-        return 'Bus stop';
-      case 'FERRY_GHAT':
-        return 'Ferry ghat';
-      case 'METRO_STATION':
-        return 'Metro station';
-      case 'RAIL_STATION':
-        return 'Railway station';
-      default:
-        return 'Transit stop';
-    }
   }
 
   Future<void> _openMap(BuildContext context) async {
@@ -279,10 +264,14 @@ class _DepartureTile extends StatelessWidget {
         title: Text(departure.headsign == null
             ? departure.routeName
             : 'To ${departure.headsign}'),
+        // The bus's own name leads when we have it: at a West Bengal stand you
+        // board "APANJAN", not "WBBus service 671". Most trips have no name
+        // recorded, so the route name stays as the fallback.
         subtitle: Text(
-          departure.isEstimated
-              ? '${departure.routeName} · estimated time'
-              : departure.routeName,
+          [
+            departure.busLabel ?? departure.routeName,
+            if (departure.isEstimated) 'estimated time',
+          ].join(' · '),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -321,14 +310,17 @@ class _FullTimetableTile extends StatelessWidget {
 class _RouteTile extends StatelessWidget {
   final PlaceRoute route;
 
-  const _RouteTile({required this.route});
+  /// The stop's mode — a route calling at a tram stop is a tram.
+  final String? category;
+
+  const _RouteTile({required this.route, this.category});
 
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: RatrooTheme.space2),
       child: ListTile(
-        leading: const Icon(Icons.directions_bus),
+        leading: Icon(modeIcon(category)),
         title: Text(route.name, maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: route.providerCode.isEmpty ? null : Text(route.providerCode),
         trailing: const Icon(Icons.chevron_right, size: 20),

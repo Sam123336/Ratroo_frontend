@@ -9,15 +9,83 @@ import '../core/location_service.dart';
 import '../models/place.dart';
 import '../core/api_client.dart';
 import '../core/theme.dart';
+import '../core/transit_icons.dart';
 import '../providers/api_providers.dart';
 import '../widgets/glass_container.dart';
 
 // Uses the device's real position. This was hardcoded to Kolkata centre, so a
 // user in Bardhaman was shown stops 100km away labelled "Nearby".
-final nearbyPlacesProvider = FutureProvider.autoDispose<ApiResponse<List<Place>>>((ref) async {
+final nearbyPlacesProvider =
+    FutureProvider.autoDispose.family<ApiResponse<List<Place>>, String?>((ref, mode) async {
   final location = await ref.watch(userLocationProvider.future);
-  return ref.watch(nearbyServiceProvider).getNearbyStops(location.latitude, location.longitude);
+
+  // Bus stops are everywhere; a ferry ghat is not. Searching the same 1 km for
+  // both meant "Nearby Ferry" was empty in a city with working ferries, since
+  // the whole state holds only about twenty ghats. Filtered searches reach
+  // further, and the screen says how far it looked.
+  final radius = mode == null ? 1000 : 25000;
+
+  return ref
+      .watch(nearbyServiceProvider)
+      .getNearbyStops(location.latitude, location.longitude, radius: radius);
 });
+
+/// Up to three services, then a count of the rest. Capped because a Kolkata
+/// interchange serves dozens and the row has to stay a row.
+class _RouteBadges extends StatelessWidget {
+  final List<PlaceRoute> routes;
+
+  /// The stop these routes call at, so a badge names the far end of the trip.
+  final String stopName;
+
+  const _RouteBadges({required this.routes, required this.stopName});
+
+  static const _visible = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final shown = routes.take(_visible).toList();
+    final hidden = routes.length - shown.length;
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: [
+        for (final route in shown)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                route.shortLabelAt(stopName),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        if (hidden > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              '+$hidden more',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 class NearbyExplorerScreen extends ConsumerStatefulWidget {
   /// Optional mode filter from the home screen's Bus/Ferry/Train/Metro buttons.
@@ -55,7 +123,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final nearbyPlacesAsync = ref.watch(nearbyPlacesProvider);
+    final nearbyPlacesAsync = ref.watch(nearbyPlacesProvider(widget.mode));
 
     return Scaffold(
       appBar: AppBar(
@@ -116,8 +184,11 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
               if (blocked) {
                 await ref.read(locationServiceProvider).openSettings();
               }
+              // Forced, so the retry asks the OS again rather than being
+              // answered from the two-minute cache.
+              await ref.read(locationServiceProvider).current(forceRefresh: true);
               ref.invalidate(userLocationProvider);
-              ref.invalidate(nearbyPlacesProvider);
+              ref.invalidate(nearbyPlacesProvider(widget.mode));
             },
             child: Text(blocked ? 'Settings' : 'Retry'),
           ),
@@ -142,18 +213,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.directions_bus,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
+                    ModeAvatar(category: place.type),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
@@ -176,6 +236,13 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          // Which services you can actually catch here. The row
+                          // used to give only a name and a distance, which does
+                          // not tell you whether the stop is any use to you.
+                          if (place.routes.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            _RouteBadges(routes: place.routes, stopName: place.canonicalName),
+                          ],
                         ],
                       ),
                     ),
@@ -394,7 +461,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () {
-                ref.invalidate(nearbyPlacesProvider);
+                ref.invalidate(nearbyPlacesProvider(widget.mode));
               },
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),

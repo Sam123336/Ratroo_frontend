@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import '../core/api_client.dart';
+import '../models/coverage_summary.dart';
+import '../models/provider.dart';
 import '../models/route.dart';
 
 class TransitService {
@@ -21,17 +23,64 @@ class TransitService {
     }
   }
 
-  /// How many routes are in the graph. Asks for one row and reads the total,
-  /// so the home screen can state real coverage instead of a fixed percentage.
-  Future<ApiResponse<int>> getRouteCount() async {
+  /// What we cover where the user is standing.
+  ///
+  /// The home screen used to announce "2800 routes ... across West Bengal" to
+  /// everyone. Both the count and the region now come from the stops nearest
+  /// the user, so someone in Bengaluru is told about Karnataka.
+  Future<ApiResponse<CoverageSummary>> getCoverageSummary(double lat, double lng) async {
     try {
-      final response = await _apiClient.client.get('/routes', queryParameters: {'limit': 1});
-      final body = response.data;
-      final total = body is Map ? (body['data']?['total'] ?? body['total']) as num? : null;
+      final response = await _apiClient.client.get(
+        '/coverage/summary',
+        queryParameters: {'lat': lat, 'lng': lng},
+      );
 
-      return total == null
-          ? ApiResponse(success: false, error: 'No route total in response')
-          : ApiResponse(success: true, data: total.toInt());
+      // The interceptor wraps the controller's own { data: ... } envelope.
+      final body = response.data['data'];
+      final payload = (body is Map && body['data'] is Map) ? body['data'] : body;
+
+      return ApiResponse(
+        success: true,
+        data: CoverageSummary.fromJson(Map<String, dynamic>.from(payload as Map)),
+      );
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: friendlyError(e));
+    } catch (e) {
+      return ApiResponse(success: false, error: e.toString());
+    }
+  }
+
+  /// Every operator in the data, busiest first.
+  Future<ApiResponse<List<TransitProvider>>> getProviders() async {
+    try {
+      final response = await _apiClient.client.get('/coverage/providers');
+      final body = response.data['data'];
+      final list = (body is Map ? body['data'] : body) as List? ?? const [];
+
+      return ApiResponse(
+        success: true,
+        data: list
+            .whereType<Map<String, dynamic>>()
+            .map(TransitProvider.fromJson)
+            .toList(),
+      );
+    } on DioException catch (e) {
+      return ApiResponse(success: false, error: friendlyError(e));
+    } catch (e) {
+      return ApiResponse(success: false, error: e.toString());
+    }
+  }
+
+  Future<ApiResponse<TransitProvider>> getProvider(String code) async {
+    try {
+      final response = await _apiClient.client.get('/coverage/providers/$code');
+      final body = response.data['data'];
+      final payload = (body is Map && body['data'] is Map) ? body['data'] : body;
+
+      return ApiResponse(
+        success: true,
+        data: TransitProvider.fromJson(Map<String, dynamic>.from(payload as Map)),
+      );
     } on DioException catch (e) {
       return ApiResponse(success: false, error: friendlyError(e));
     } catch (e) {
