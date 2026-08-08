@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ratroo_app/core/api_client.dart';
 import 'package:ratroo_app/models/journey.dart';
 import 'package:ratroo_app/models/place.dart';
+import 'package:ratroo_app/models/route.dart';
 
 /// Guards the app<->backend field mapping. Payloads below are verbatim from
 /// the running API — if the backend renames a field, this fails instead of the
@@ -63,5 +64,97 @@ void main() {
       friendlyError(DioException(requestOptions: req, type: DioExceptionType.connectionError)),
       "Can't reach Ratroo. Check your connection.",
     );
+  });
+
+  test('Place reads departures from /v1/places/:id, verbatim from the API', () {
+    final place = Place.fromJson({
+      'id': '36d50636-6abf-44b5-8e75-b8cc25acbf3a',
+      'title': 'Bankura Bus Stand',
+      'category': 'STOP',
+      'latitude': 23.2324,
+      'longitude': 87.0753,
+      'routes': [
+        {'id': 'r1', 'name': 'WBBus service 135', 'providerCode': 'WBBUS'},
+      ],
+      'departures': [
+        {
+          'time': '01:40',
+          'routeId': '019fe206-5bd9-76dc-8fcd-585d8b6d4046',
+          'routeName': 'WBBus service 135',
+          'timeSource': 'SCRAPED',
+          'headsign': 'Tatanagar',
+        },
+        {
+          'time': '14:05',
+          'routeId': '019fe206-5bd9-7adb-9e9c-329b6f860193',
+          'routeName': 'WBBus service 152',
+          'timeSource': 'INTERPOLATED',
+          'headsign': null,
+        },
+      ],
+      'sources': [
+        {'providerCode': 'WBBUS', 'name': 'WBBUS', 'website': null},
+      ],
+    });
+
+    expect(place.routes.single.name, 'WBBus service 135');
+    expect(place.departures.first.headsign, 'Tatanagar');
+    expect(place.departures.first.isEstimated, isFalse);
+    expect(place.departures.last.isEstimated, isTrue);
+    expect(place.sources.single.website, isNull);
+
+    // The screen splits "upcoming" from "earlier" on this value.
+    expect(place.departures.first.minutesOfDay, 100);
+    expect(place.departures.last.minutesOfDay, 14 * 60 + 5);
+  });
+
+  test('Departure survives a malformed time instead of crashing the screen', () {
+    expect(const Departure(time: '', routeId: 'r', routeName: 'n').minutesOfDay, isNull);
+    expect(const Departure(time: 'noon', routeId: 'r', routeName: 'n').minutesOfDay, isNull);
+  });
+
+  test('Place with no departures parses to an empty list, not null', () {
+    final place = Place.fromJson({'id': 'x', 'title': 'Quiet Stop'});
+    expect(place.departures, isEmpty);
+    expect(place.routes, isEmpty);
+  });
+
+  test('RouteModel titles a route by where it goes, never by the scraper slug', () {
+    final route = RouteModel.fromJson({
+      'id': '019fe206-5bd9-76dc-8fcd-585d8b6d4046',
+      'longName': 'WBBus service 135',
+      'routeCode': null,
+      'providerCode': 'WBBUS',
+      'providerWebsite': 'https://wbbus.in',
+      'originName': 'Tatanagar',
+      'destinationName': 'Baharampur',
+      'externalId': 'wbbus:bus:carwan-wb55e9417-tatanagar-baharampur-1039:route',
+      'stops': [
+        {'name': 'Baharampur', 'stopSequence': 1, 'departureTime': '19:00', 'latitude': null, 'longitude': null},
+        {'name': 'Kandi', 'stopSequence': 2, 'departureTime': '19:45', 'latitude': '23.95', 'longitude': '88.03'},
+      ],
+    });
+
+    expect(route.title, 'Tatanagar \u2192 Baharampur');
+    expect(route.title, isNot(contains('wbbus:bus:')));
+    expect(route.stops.length, 2);
+    expect(route.stops.first.departureTime, '19:00');
+    // Postgres sends DECIMAL as a string; a silent null here empties the map.
+    expect(route.stops.last.lat, 23.95);
+    // One located stop is not a line worth drawing.
+    expect(route.mappableStops, isEmpty);
+  });
+
+  test('RouteModel falls back to the operator name when an endpoint is missing', () {
+    final route = RouteModel.fromJson({
+      'id': 'r1',
+      'longName': 'AANI: from Chittaranjan',
+      'providerCode': 'WBBUS',
+      'originName': 'Chittaranjan',
+      'destinationName': null,
+    });
+
+    expect(route.title, 'AANI: from Chittaranjan');
+    expect(route.providerWebsite, isNull);
   });
 }

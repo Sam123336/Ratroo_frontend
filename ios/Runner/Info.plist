@@ -60,6 +60,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<!-- Allows http:// to the local dev API. ATS stays on for every public host. -->
+	<!-- Shown verbatim in the iOS permission prompt. Say what it is for. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ratroo uses your location to show bus, tram, ferry and train stops near you.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

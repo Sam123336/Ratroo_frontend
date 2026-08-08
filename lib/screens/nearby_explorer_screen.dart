@@ -5,15 +5,18 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../core/location_service.dart';
 import '../models/place.dart';
 import '../core/api_client.dart';
+import '../core/theme.dart';
 import '../providers/api_providers.dart';
 import '../widgets/glass_container.dart';
-import '../widgets/confidence_gauge.dart';
 
+// Uses the device's real position. This was hardcoded to Kolkata centre, so a
+// user in Bardhaman was shown stops 100km away labelled "Nearby".
 final nearbyPlacesProvider = FutureProvider.autoDispose<ApiResponse<List<Place>>>((ref) async {
-  final nearbyService = ref.watch(nearbyServiceProvider);
-  return nearbyService.getNearbyStops(22.5726, 88.3639);
+  final location = await ref.watch(userLocationProvider.future);
+  return ref.watch(nearbyServiceProvider).getNearbyStops(location.latitude, location.longitude);
 });
 
 class NearbyExplorerScreen extends ConsumerStatefulWidget {
@@ -71,10 +74,17 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
       body: nearbyPlacesAsync.when(
         data: (apiResponse) {
           final places = _applyModeFilter(apiResponse.data ?? []);
-          if (places.isEmpty) {
-            return _buildEmptyState();
-          }
-          return _isMapMode ? _buildMapMode(places) : _buildListMode(places, apiResponse.metadata?.confidenceScore ?? 0.0);
+          final body = places.isEmpty
+              ? _buildEmptyState()
+              : _isMapMode
+                  ? _buildMapMode(places)
+                  : _buildListMode(places);
+
+          // Tell the user when these are not actually near them.
+          final location = ref.watch(userLocationProvider).valueOrNull;
+          if (location == null || location.isLive) return body;
+
+          return Column(children: [_buildLocationBanner(location), Expanded(child: body)]);
         },
         loading: () => _buildLoadingState(),
         error: (error, stack) => _buildErrorState(error.toString()),
@@ -82,7 +92,41 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
     );
   }
 
-  Widget _buildListMode(List<Place> places, double confidenceScore) {
+  /// Shown when stops are relative to the Kolkata fallback, not the user.
+  Widget _buildLocationBanner(UserLocation location) {
+    final theme = Theme.of(context);
+    final blocked = location.status == LocationStatus.deniedForever;
+
+    return Container(
+      width: double.infinity,
+      color: RatrooTheme.confidenceMedFill.withValues(alpha: 0.15),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.location_off, size: 18, color: RatrooTheme.confidenceMedText),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              locationStatusMessage(location.status),
+              style: theme.textTheme.bodySmall?.copyWith(color: RatrooTheme.confidenceMedText),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (blocked) {
+                await ref.read(locationServiceProvider).openSettings();
+              }
+              ref.invalidate(userLocationProvider);
+              ref.invalidate(nearbyPlacesProvider);
+            },
+            child: Text(blocked ? 'Settings' : 'Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListMode(List<Place> places) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: places.length,
@@ -125,7 +169,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            place.type ?? 'Bus Stop',
+                            place.readableType,
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                             ),
@@ -136,20 +180,17 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        ConfidenceGauge(score: confidenceScore),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Nearby',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                    // Was a ConfidenceGauge showing the same API-wide score on
+                    // every row, labelled "% Reliable" — it said nothing about
+                    // the stop. How far away it is, does.
+                    if (place.distanceLabel != null)
+                      Text(
+                        place.distanceLabel!,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
               ),

@@ -5,313 +5,375 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/api_providers.dart';
 import '../models/place.dart';
+import '../core/location_service.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
-import '../widgets/glass_container.dart';
 
 // Fetch by id. This used to call searchPlaces(id) — searching for a UUID by
 // name — so the screen could only ever render "No details found".
-final placeDetailsProvider = FutureProvider.autoDispose.family<ApiResponse<Place>, String>((ref, id) async {
+final placeDetailsProvider =
+    FutureProvider.autoDispose.family<ApiResponse<Place>, String>((ref, id) async {
   final service = ref.watch(searchServiceProvider);
   return service.getPlaceById(id);
 });
 
+/// What is at this stop and when the next services leave.
+///
+/// This screen used to lead with a "Connectivity Index" and a "Reliability"
+/// percentage that was a hardcoded string. Both are gone: a rider needs
+/// departures, destinations and routes, not the database's opinion of itself.
 class PlaceDetailsScreen extends ConsumerWidget {
   final String? placeId;
-  
+
   const PlaceDetailsScreen({super.key, this.placeId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final placeName = placeId ?? "Arambagh";
-    final placeDetailsAsync = ref.watch(placeDetailsProvider(placeName));
-    // Show the resolved name once it loads — a raw UUID in the app bar is useless.
-    final title = placeDetailsAsync.valueOrNull?.data?.canonicalName ?? 'Place details';
+    if (placeId == null || placeId!.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Stop')),
+        body: _Message(
+          icon: Icons.location_off_outlined,
+          text: 'No stop was selected.',
+        ),
+      );
+    }
+
+    final async = ref.watch(placeDetailsProvider(placeId!));
+    final title = async.valueOrNull?.data?.canonicalName ?? 'Stop';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bookmark_border),
-            onPressed: () {},
-          )
-        ],
-      ),
-      body: placeDetailsAsync.when(
-        data: (response) {
-          final place = response.data;
-          if (place == null) {
-            return _buildEmptyState(context, placeName);
-          }
-          final confidence = response.metadata?.confidenceScore ?? 0.95;
-          final sources = response.metadata?.dataSources ?? ['Places Database'];
-
-          return _buildContent(context, place, confidence, sources);
-        },
-        loading: () => _buildShimmerLoading(context),
-        error: (err, stack) => _buildErrorState(context, err.toString()),
-      ),
-    );
-  }
-
-  Future<void> _openProviderSite(BuildContext context, List<String> sources) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final url = _providerSiteFor(sources);
-
-    if (url == null) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text('No official website recorded for this provider yet.'),
-      ));
-      return;
-    }
-
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
-    }
-  }
-
-  /// Only returns a URL the API actually supplied — never a guessed one.
-  Uri? _providerSiteFor(List<String> sources) {
-    for (final source in sources) {
-      if (source.startsWith('http://') || source.startsWith('https://')) {
-        return Uri.tryParse(source);
-      }
-    }
-    return null;
-  }
-
-  Widget _buildContent(BuildContext context, Place place, double confidence, List<String> sources) {
-    final theme = Theme.of(context);
-    final connectivityScore = (confidence * 100).round();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Connectivity Score Card
-          Center(
-            child: GlassContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
-              child: Column(
-                children: [
-                  Text(
-                    'Connectivity Index',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '$connectivityScore',
-                    style: theme.textTheme.displayLarge?.copyWith(
-                      color: RatrooTheme.confidence(connectivityScore / 100).$2,
-                      fontSize: 72,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().scale(curve: Curves.easeOutBack),
+      appBar: AppBar(title: Text(title)),
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(placeDetailsProvider(placeId!)),
+        child: async.when(
+          data: (response) {
+            final place = response.data;
+            if (place == null) {
+              return _Message(
+                icon: Icons.search_off,
+                text: response.error ?? 'We have no details for this stop yet.',
+              );
+            }
+            return _PlaceBody(place: place);
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => _Message(
+            icon: Icons.wifi_off,
+            text: 'Could not load this stop.\n$err',
+            onRetry: () => ref.invalidate(placeDetailsProvider(placeId!)),
           ),
-          
-          const SizedBox(height: 32),
-          
-          // Stats Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _StatColumn(val: place.type == 'BUS_STOP' ? '1' : '0', label: 'Bus Station'),
-              const _StatColumn(val: '96%', label: 'Reliability'),
-              _StatColumn(val: place.lat != null ? 'Yes' : 'No', label: 'Geo Located'),
-            ],
-          ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1, end: 0),
-          
-          const SizedBox(height: 40),
-          
-          Text('Location Details', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))
-              .animate().fadeIn(delay: 200.ms),
-          const SizedBox(height: 16),
-          GlassContainer(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _DetailRow(label: 'Type', value: place.type ?? 'Transit Location'),
-                const Divider(),
-                _DetailRow(label: 'Latitude', value: place.lat?.toStringAsFixed(6) ?? 'N/A'),
-                const Divider(),
-                _DetailRow(label: 'Longitude', value: place.lon?.toStringAsFixed(6) ?? 'N/A'),
-              ],
-            ),
-          ).animate().fadeIn(delay: 250.ms),
-          
-          const SizedBox(height: 40),
-          
-          Text('Verified Data Provenance', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))
-              .animate().fadeIn(delay: 300.ms),
-          const SizedBox(height: 16),
-          GlassContainer(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                ...sources.map((src) => Column(
-                  children: [
-                    _SourceRow(name: src, date: 'Sync Completed'),
-                    if (src != sources.last) const Divider(),
-                  ],
-                )),
-                const SizedBox(height: 16),
-                // Was an empty onPressed — a button that did nothing. The
-                // provider website comes from the providers table, which is
-                // currently unseeded, so say so rather than dead-ending.
-                TextButton.icon(
-                  onPressed: () => _openProviderSite(context, sources),
-                  icon: const Icon(Icons.open_in_new, size: 16),
-                  label: const Text('Open provider website'),
-                )
-              ],
-            ),
-          ).animate().fadeIn(delay: 350.ms),
-          
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShimmerLoading(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Container(
-            height: 180,
-            width: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(24),
-            ),
-          ),
-          const SizedBox(height: 40),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(3, (i) => Container(height: 50, width: 80, color: Colors.grey.withValues(alpha: 0.1))),
-          ),
-          const SizedBox(height: 40),
-          Container(height: 150, width: double.infinity, color: Colors.grey.withValues(alpha: 0.1)),
-          const SizedBox(height: 40),
-          Container(height: 120, width: double.infinity, color: Colors.grey.withValues(alpha: 0.1)),
-        ],
-      ),
-    ).animate(onPlay: (controller) => controller.repeat())
-     .shimmer(duration: 1200.ms, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05));
-  }
-
-  Widget _buildEmptyState(BuildContext context, String placeName) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.map_outlined, size: 64, color: Colors.grey.withValues(alpha: 0.5)),
-            const SizedBox(height: 16),
-            Text(
-              'No details found for "$placeName".',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState(BuildContext context, String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load place details:\n$error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-          ],
         ),
       ),
     );
   }
 }
 
-class _StatColumn extends StatelessWidget {
-  final String val;
-  final String label;
+class _PlaceBody extends ConsumerWidget {
+  final Place place;
 
-  const _StatColumn({required this.val, required this.label});
+  const _PlaceBody({required this.place});
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final now = ref.watch(nowProvider)();
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    // Departures already sorted by the API. Split at "now" so the next service
+    // is at the top, with earlier ones still reachable below.
+    final upcoming = place.departures
+        .where((d) => (d.minutesOfDay ?? -1) >= nowMinutes)
+        .toList();
+    final earlier = place.departures
+        .where((d) => (d.minutesOfDay ?? 1 << 30) < nowMinutes)
+        .toList();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+          RatrooTheme.space4, RatrooTheme.space4, RatrooTheme.space4, RatrooTheme.space8),
       children: [
-        Text(val, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        _header(context, ref, theme),
+        const SizedBox(height: RatrooTheme.space6),
+        _sectionTitle(theme, 'Departures'),
+        const SizedBox(height: RatrooTheme.space2),
+        if (place.departures.isEmpty)
+          _noTimetableNotice(theme)
+        else ...[
+          if (upcoming.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: RatrooTheme.space3),
+              child: Text(
+                'Nothing more scheduled today. Tomorrow starts at ${place.departures.first.time}.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ...upcoming.take(12).map((d) => _DepartureTile(departure: d, nowMinutes: nowMinutes)),
+          if (earlier.isNotEmpty || upcoming.length > 12)
+            _FullTimetableTile(place: place, nowMinutes: nowMinutes),
+        ],
+        const SizedBox(height: RatrooTheme.space6),
+        _sectionTitle(theme, 'Routes stopping here'),
+        const SizedBox(height: RatrooTheme.space2),
+        if (place.routes.isEmpty)
+          Text('No routes are recorded here yet.', style: theme.textTheme.bodyMedium)
+        else
+          ...place.routes.map((r) => _RouteTile(route: r)),
+        const SizedBox(height: RatrooTheme.space6),
+        _sources(context, theme),
       ],
     );
   }
+
+  Widget _header(BuildContext context, WidgetRef ref, ThemeData theme) {
+    final distance = ref.watch(userLocationProvider).maybeWhen(
+          data: (loc) => loc.isLive ? _distanceLabel(loc) : null,
+          orElse: () => null,
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(place.canonicalName, style: theme.textTheme.headlineSmall),
+        const SizedBox(height: RatrooTheme.space2),
+        Wrap(
+          spacing: RatrooTheme.space2,
+          runSpacing: RatrooTheme.space2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _Chip(icon: Icons.directions_bus, label: _readableType(place.type)),
+            if (distance != null) _Chip(icon: Icons.near_me, label: distance),
+            if (place.lat != null && place.lon != null)
+              ActionChip(
+                avatar: const Icon(Icons.map_outlined, size: 16),
+                label: const Text('Open in maps'),
+                onPressed: () => _openMap(context),
+              ),
+          ],
+        ),
+      ],
+    ).animate().fadeIn(duration: 200.ms);
+  }
+
+  /// Straight-line distance — honest about being "as the crow flies", since we
+  /// have no walking network to route over.
+  String? _distanceLabel(UserLocation loc) {
+    if (place.lat == null || place.lon == null) return null;
+    final metres = distanceMetres(loc.latitude, loc.longitude, place.lat!, place.lon!);
+    return metres < 1000
+        ? '${metres.round()} m away'
+        : '${(metres / 1000).toStringAsFixed(1)} km away';
+  }
+
+  String _readableType(String? type) {
+    switch (type) {
+      case 'BUS_STOP':
+      case 'STOP':
+        return 'Bus stop';
+      case 'FERRY_GHAT':
+        return 'Ferry ghat';
+      case 'METRO_STATION':
+        return 'Metro station';
+      case 'RAIL_STATION':
+        return 'Railway station';
+      default:
+        return 'Transit stop';
+    }
+  }
+
+  Future<void> _openMap(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = Uri.parse('geo:${place.lat},${place.lon}?q=${place.lat},${place.lon}'
+        '(${Uri.encodeComponent(place.canonicalName)})');
+
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      messenger.showSnackBar(const SnackBar(content: Text('No maps app to open this.')));
+    }
+  }
+
+  Widget _noTimetableNotice(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(RatrooTheme.space4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
+        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.schedule_outlined, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+          const SizedBox(width: RatrooTheme.space3),
+          Expanded(
+            child: Text(
+              'No timetable has been published for this stop yet. '
+              'The routes below do stop here — we just do not have their times.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(ThemeData theme, String text) =>
+      Text(text, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold));
+
+  Widget _sources(BuildContext context, ThemeData theme) {
+    if (place.sources.isEmpty) return const SizedBox.shrink();
+
+    final names = place.sources.map((s) => s.name).join(', ');
+    final withSite = place.sources.where((s) => (s.website ?? '').isNotEmpty).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Data from $names.',
+          style: theme.textTheme.labelMedium
+              ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+        ),
+        // Only offered when the provider registry actually holds a URL —
+        // never a guessed one.
+        ...withSite.map((s) => TextButton.icon(
+              onPressed: () => _openSite(context, s.website!),
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: Text('${s.name} website'),
+            )),
+      ],
+    );
+  }
+
+  Future<void> _openSite(BuildContext context, String url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = Uri.tryParse(url);
+    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
+    }
+  }
 }
 
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
+class _DepartureTile extends StatelessWidget {
+  final Departure departure;
+  final int nowMinutes;
 
-  const _DetailRow({required this.label, required this.value});
+  const _DepartureTile({required this.departure, required this.nowMinutes});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
+    final theme = Theme.of(context);
+    final minutes = departure.minutesOfDay;
+    final away = minutes == null ? null : minutes - nowMinutes;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: RatrooTheme.space2),
+      child: ListTile(
+        onTap: () => context.push('/route-details?id=${departure.routeId}'),
+        // Kept to a single line each: a Column here overflowed ListTile's
+        // leading slot as soon as a countdown appeared beneath the time.
+        leading: SizedBox(
+          width: 52,
+          child: Text(departure.time,
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        ),
+        title: Text(departure.headsign == null
+            ? departure.routeName
+            : 'To ${departure.headsign}'),
+        subtitle: Text(
+          departure.isEstimated
+              ? '${departure.routeName} · estimated time'
+              : departure.routeName,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: away != null && away <= 60
+            ? Text(away <= 0 ? 'now' : 'in $away min',
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: RatrooTheme.confidenceHighText, fontWeight: FontWeight.w600))
+            : const Icon(Icons.chevron_right, size: 20),
       ),
     );
   }
 }
 
-class _SourceRow extends StatelessWidget {
-  final String name;
-  final String date;
+/// Every remaining departure of the day, collapsed so it does not bury the
+/// next few services.
+class _FullTimetableTile extends StatelessWidget {
+  final Place place;
+  final int nowMinutes;
 
-  const _SourceRow({required this.name, required this.date});
+  const _FullTimetableTile({required this.place, required this.nowMinutes});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Card(
+      margin: const EdgeInsets.only(bottom: RatrooTheme.space2),
+      child: ExpansionTile(
+        title: Text('Full timetable (${place.departures.length} departures)'),
+        children: place.departures
+            .map((d) => _DepartureTile(departure: d, nowMinutes: nowMinutes))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _RouteTile extends StatelessWidget {
+  final PlaceRoute route;
+
+  const _RouteTile({required this.route});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: RatrooTheme.space2),
+      child: ListTile(
+        leading: const Icon(Icons.directions_bus),
+        title: Text(route.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: route.providerCode.isEmpty ? null : Text(route.providerCode),
+        trailing: const Icon(Icons.chevron_right, size: 20),
+        onTap: () => context.push('/route-details?id=${route.id}'),
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _Chip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final VoidCallback? onRetry;
+
+  const _Message({required this.icon, required this.text, this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(RatrooTheme.space8),
       children: [
-        Row(
-          children: [
-            const Icon(Icons.verified, size: 16, color: Colors.blue),
-            const SizedBox(width: 8),
-            Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        Text(date, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        const SizedBox(height: RatrooTheme.space8),
+        Icon(icon, size: 56, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
+        const SizedBox(height: RatrooTheme.space4),
+        Text(text, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyLarge),
+        if (onRetry != null) ...[
+          const SizedBox(height: RatrooTheme.space4),
+          Center(child: FilledButton(onPressed: onRetry, child: const Text('Try again'))),
+        ],
       ],
     );
   }

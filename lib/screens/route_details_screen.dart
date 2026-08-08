@@ -1,396 +1,346 @@
+import 'dart:math' show log, ln2;
+
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/api_providers.dart';
 import '../models/route.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
-import '../widgets/glass_container.dart';
-import '../widgets/confidence_gauge.dart';
 
-final routeDetailsProvider = FutureProvider.autoDispose.family<ApiResponse<RouteModel>, String>((ref, routeId) async {
-  final service = ref.watch(transitServiceProvider);
-  return await service.getRouteDetails(routeId);
+final routeDetailsProvider =
+    FutureProvider.autoDispose.family<ApiResponse<RouteModel>, String>((ref, routeId) async {
+  return ref.watch(transitServiceProvider).getRouteDetails(routeId);
 });
 
+/// Where a route goes, which stops it calls at, and when.
+///
+/// This screen used to headline "High Confidence — Real-time verified via
+/// WBBUS Live API" beside "100% Reliable". There is no live API: the data is
+/// scraped timetables. Both claims are gone, along with a "Reserve Seat"
+/// button that only ever said reservation was not enabled.
 class RouteDetailsScreen extends ConsumerWidget {
   final String? routeId;
-  
+
   const RouteDetailsScreen({super.key, this.routeId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (routeId == null) {
+    if (routeId == null || routeId!.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Route & Reliability')),
-        body: const Center(
-          child: Text('No route ID was provided. Please select a valid route.'),
-        ),
+        appBar: AppBar(title: const Text('Route')),
+        body: const _Message(icon: Icons.wrong_location_outlined, text: 'No route was selected.'),
       );
     }
-    final routeDetailsAsync = ref.watch(routeDetailsProvider(routeId!));
+
+    final async = ref.watch(routeDetailsProvider(routeId!));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Route & Reliability'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bookmark_border),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: routeDetailsAsync.when(
+      appBar: AppBar(title: Text(async.valueOrNull?.data?.title ?? 'Route')),
+      body: async.when(
         data: (response) {
           final route = response.data;
           if (route == null) {
-            return _buildErrorState(context, 'Route details not found.');
+            return _Message(
+              icon: Icons.search_off,
+              text: response.error ?? 'We have no details for this route.',
+            );
           }
-          final confidence = response.metadata?.confidenceScore ?? 0.95;
-          return _buildContent(context, ref, route, confidence);
+          return _RouteBody(route: route);
         },
-        loading: () => _buildShimmerLoading(context),
-        error: (err, stack) => _buildErrorState(context, err.toString()),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => _Message(
+          icon: Icons.wifi_off,
+          text: 'Could not load this route.\n$err',
+          onRetry: () => ref.invalidate(routeDetailsProvider(routeId!)),
+        ),
       ),
     );
   }
+}
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, RouteModel route, double confidence) {
+class _RouteBody extends ConsumerWidget {
+  final RouteModel route;
+
+  const _RouteBody({required this.route});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final timed = route.stops.where((s) => s.departureTime != null).length;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Map Placeholder Header
-          Container(
-            height: 180,
-            width: double.infinity,
-            // Was a NetworkImage of 'tile.openstreetmap.org/13/22.5726/88.3639.png'
-            // — lat/lng substituted into the {z}/{x}/{y} slots, so it 400'd on
-            // every build. A gradient until the API returns route geometry.
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.primary.withValues(alpha: 0.12),
-                  theme.colorScheme.primary.withValues(alpha: 0.04),
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        // Only drawn when there is real geometry — the old header was an empty
+        // gradient labelled "Live Route Path", which promised a map and showed
+        // a rectangle.
+        if (route.mappableStops.isNotEmpty) _RouteMap(stops: route.mappableStops),
+        Padding(
+          padding: const EdgeInsets.all(RatrooTheme.space4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(route.title, style: theme.textTheme.headlineSmall),
+              const SizedBox(height: RatrooTheme.space2),
+              Wrap(
+                spacing: RatrooTheme.space2,
+                runSpacing: RatrooTheme.space2,
+                children: [
+                  Chip(
+                    avatar: const Icon(Icons.business, size: 16),
+                    label: Text(route.providerCode),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  if (route.stops.isNotEmpty)
+                    Chip(
+                      avatar: const Icon(Icons.pin_drop_outlined, size: 16),
+                      label: Text('${route.stops.length} stops'),
+                      visualDensity: VisualDensity.compact,
+                    ),
                 ],
               ),
-            ),
-            child: Center(
-              child: GlassContainer(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.map, color: theme.colorScheme.primary, size: 18),
-                    const SizedBox(width: 8),
-                    const Text('Live Route Path', style: TextStyle(fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ),
-          ).animate().fadeIn(),
-
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Route info title
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            route.routeCode,
-                            style: theme.textTheme.titleLarge?.copyWith(fontSize: 24, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${route.originName} to ${route.destinationName}',
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        route.providerCode,
-                        style: TextStyle(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ).animate().slideX(begin: -0.1, end: 0),
-
-                const SizedBox(height: 24),
-
-                // High Confidence card
-                GlassContainer(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: RatrooTheme.confidence(confidence).$1,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              confidence >= 0.8 ? 'High Confidence' : 'Moderate Confidence',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                            Text(
-                              'Real-time verified via ${route.providerCode} Live API',
-                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      ConfidenceGauge(score: confidence),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 150.ms),
-
-                const SizedBox(height: 32),
-
-                // Intermediate Stops Timeline
+              if (route.destinationName == null && route.originName != null) ...[
+                const SizedBox(height: RatrooTheme.space3),
                 Text(
-                  'Upcoming Stops',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  'The operator does not publish a destination for this service.',
+                  style: theme.textTheme.bodyMedium,
                 ),
-                const SizedBox(height: 16),
-
-                _buildStopsTimeline(context, route),
-
-                const SizedBox(height: 32),
-
-                // Seat reservation green button CTA
-                SizedBox(
-                  width: double.infinity,
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Seat reservation is not enabled for this route.')),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: RatrooTheme.confidenceHighFill,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Reserve Seat',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(width: 8),
-                        Icon(Icons.arrow_forward, size: 18),
-                      ],
-                    ),
-                  ),
-                ).animate().scale(delay: 300.ms, curve: Curves.easeOutBack),
-
-                const SizedBox(height: 20),
-
-                // Timetable deep link
-                Center(
-                  child: TextButton.icon(
-                    // Was an empty onPressed. The operator's URL lives in the
-                    // providers table, which has no rows yet, so there is
-                    // nothing honest to open.
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'No official timetable URL recorded for ${route.providerCode} yet.',
-                        ),
-                      ),
-                    ),
-                    icon: const Icon(Icons.open_in_new, size: 16),
-                    label: Text('View official timetable on ${route.providerCode}'),
-                  ),
-                ),
-                const SizedBox(height: 40),
               ],
-            ),
+              const SizedBox(height: RatrooTheme.space6),
+              Text('Stops on this route',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: RatrooTheme.space3),
+              if (route.stops.isEmpty)
+                Text(
+                  'The stop-by-stop sequence for this route has not been '
+                  'published yet.',
+                  style: theme.textTheme.bodyMedium,
+                )
+              else
+                _StopsTimeline(stops: route.stops),
+              const SizedBox(height: RatrooTheme.space4),
+              Text(
+                timed == 0
+                    ? 'Times not published for this route. Source: ${route.providerCode}.'
+                    : 'Scheduled times from ${route.providerCode}. Buses run to traffic, '
+                        'not to the minute.',
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+              // Shown only when the operator's URL is recorded and confirmed.
+              // The button used to be unconditional and always answered with a
+              // snackbar saying no URL existed.
+              if (route.providerWebsite != null)
+                TextButton.icon(
+                  onPressed: () => _openSite(context, route.providerWebsite!),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: Text('Open ${route.providerCode} website'),
+                ),
+              const SizedBox(height: RatrooTheme.space8),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildStopsTimeline(BuildContext context, RouteModel route) {
-    // Generate complete list of stops: Origin -> Vias -> Destination
-    final allStops = [
-      route.originName,
-      ...route.viaPoints,
-      route.destinationName,
-    ];
+Future<void> _openSite(BuildContext context, String url) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final uri = Uri.tryParse(url);
+  if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
+  }
+}
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: allStops.length,
-      itemBuilder: (context, index) {
-        final stopName = allStops[index];
-        final isFirst = index == 0;
-        final isLast = index == allStops.length - 1;
+/// The route drawn over OpenStreetMap tiles, through the stops we can place.
+class _RouteMap extends StatelessWidget {
+  final List<RouteStop> stops;
 
-        return IntrinsicHeight(
-          child: Row(
-            children: [
-              // Left time indicator
-              SizedBox(
-                width: 70,
-                child: Text(
-                  isFirst
-                      ? 'Origin'
-                      : isLast
-                          ? 'Dest.'
-                           : 'Stop $index',
-                  style: TextStyle(
-                    fontWeight: isFirst || isLast ? FontWeight.bold : FontWeight.normal,
-                    color: isFirst || isLast ? Theme.of(context).primaryColor : Colors.grey,
-                  ),
-                ),
-              ),
-              // Timeline Node Line & Circle
-              Column(
-                children: [
-                  Container(
-                    width: 2,
-                    height: 16,
-                    color: isFirst ? Colors.transparent : Colors.grey.withValues(alpha: 0.3),
-                  ),
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: isFirst || isLast ? Theme.of(context).primaryColor : Colors.grey,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      color: isLast ? Colors.transparent : Colors.grey.withValues(alpha: 0.3),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 16),
-              // Stop text details
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: InkWell(
-                    onTap: () => context.push('/place-details?id=$stopName'),
-                    child: Text(
-                      stopName,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: isFirst || isLast ? FontWeight.w600 : FontWeight.normal,
-                      ),
-                    ),
-                  ),
-                ),
+  const _RouteMap({required this.stops});
+
+  @override
+  Widget build(BuildContext context) {
+    final points = stops.map((s) => LatLng(s.lat!, s.lon!)).toList();
+    final lats = points.map((p) => p.latitude);
+    final lons = points.map((p) => p.longitude);
+    final minLat = lats.reduce((a, b) => a < b ? a : b);
+    final maxLat = lats.reduce((a, b) => a > b ? a : b);
+    final minLon = lons.reduce((a, b) => a < b ? a : b);
+    final maxLon = lons.reduce((a, b) => a > b ? a : b);
+
+    // Centre and zoom are computed rather than handed to CameraFit: inside a
+    // ListView the map's height is unbounded during layout, so CameraFit sized
+    // the view to the whole viewport and the 220px box showed only its
+    // northern slice — a Kolkata route framed over Bangladesh.
+    final span = [maxLat - minLat, maxLon - minLon].reduce((a, b) => a > b ? a : b);
+    final zoom = span <= 0
+        ? 13.0
+        : (log(360 / span) / ln2 - 1.5).clamp(5.0, 14.0).toDouble();
+
+    return SizedBox(
+      height: 220,
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2),
+          initialZoom: zoom,
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+          ),
+        ),
+        children: [
+          // CARTO's OSM-derived basemap: OSM's own tile servers forbid app
+          // traffic and return 403 on every tile.
+          TileLayer(
+            urlTemplate: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.example.ratroo_app',
+            subdomains: const ['a', 'b', 'c', 'd'],
+            maxNativeZoom: 20,
+          ),
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: points,
+                strokeWidth: 4,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ],
           ),
-        ).animate().fadeIn(delay: (index * 100).ms);
-      },
-    );
-  }
-
-  Widget _buildShimmerLoading(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          Container(height: 180, width: double.infinity, color: Colors.grey.withValues(alpha: 0.1)),
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(height: 32, width: 200, color: Colors.grey.withValues(alpha: 0.1)),
-                const SizedBox(height: 8),
-                Container(height: 20, width: 150, color: Colors.grey.withValues(alpha: 0.1)),
-                const SizedBox(height: 24),
-                Container(height: 80, width: double.infinity, color: Colors.grey.withValues(alpha: 0.1)),
-                const SizedBox(height: 32),
-                Container(height: 24, width: 120, color: Colors.grey.withValues(alpha: 0.1)),
-                const SizedBox(height: 16),
-                ...List.generate(3, (index) => Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Container(height: 50, width: double.infinity, color: Colors.grey.withValues(alpha: 0.1)),
-                )),
-              ],
-            ),
-          )
+          MarkerLayer(
+            markers: [
+              for (final point in points)
+                Marker(
+                  point: point,
+                  width: 12,
+                  height: 12,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          // Attribution is a licence condition for OSM-derived tiles.
+          const RichAttributionWidget(
+            attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
+          ),
         ],
       ),
-    ).animate(onPlay: (controller) => controller.repeat())
-     .shimmer(duration: 1200.ms, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05));
+    );
   }
+}
 
-  Widget _buildErrorState(BuildContext context, String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load route details:\n$error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.redAccent),
+class _StopsTimeline extends StatelessWidget {
+  final List<RouteStop> stops;
+
+  const _StopsTimeline({required this.stops});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        for (var i = 0; i < stops.length; i++)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 52,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      stops[i].departureTime ?? '—',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: stops[i].departureTime == null
+                            ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+                _Rail(isFirst: i == 0, isLast: i == stops.length - 1),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                        left: RatrooTheme.space3, bottom: RatrooTheme.space4),
+                    child: Text(stops[i].name, style: theme.textTheme.bodyLarge),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Failed to invalidate route Details')),
-              ),
-              child: const Text('Retry'),
+          ),
+      ],
+    ).animate().fadeIn(duration: 200.ms);
+  }
+}
+
+class _Rail extends StatelessWidget {
+  final bool isFirst;
+  final bool isLast;
+
+  const _Rail({required this.isFirst, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = Theme.of(context).colorScheme.primary;
+
+    return SizedBox(
+      width: 16,
+      child: Column(
+        children: [
+          Expanded(
+            flex: 0,
+            child: Container(width: 2, height: 4, color: isFirst ? Colors.transparent : colour),
+          ),
+          Container(
+            width: 11,
+            height: 11,
+            decoration: BoxDecoration(
+              color: isFirst || isLast ? colour : Theme.of(context).colorScheme.surface,
+              shape: BoxShape.circle,
+              border: Border.all(color: colour, width: 2),
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: Container(width: 2, color: isLast ? Colors.transparent : colour),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final VoidCallback? onRetry;
+
+  const _Message({required this.icon, required this.text, this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(RatrooTheme.space8),
+      children: [
+        const SizedBox(height: RatrooTheme.space8),
+        Icon(icon, size: 56, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
+        const SizedBox(height: RatrooTheme.space4),
+        Text(text, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyLarge),
+        if (onRetry != null) ...[
+          const SizedBox(height: RatrooTheme.space4),
+          Center(child: FilledButton(onPressed: onRetry, child: const Text('Try again'))),
+        ],
+      ],
     );
   }
 }

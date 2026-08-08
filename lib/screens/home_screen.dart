@@ -9,13 +9,32 @@ import '../models/place.dart';
 import '../models/route.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
+import '../core/location_service.dart';
 import '../widgets/glass_container.dart';
-import '../widgets/confidence_gauge.dart';
 
-// Fetch nearby stops using Kolkata coordinates for the Home screen
+// Stops around wherever the user actually is.
 final homeNearbyStationsProvider = FutureProvider.autoDispose<ApiResponse<List<Place>>>((ref) async {
-  final service = ref.watch(nearbyServiceProvider);
-  return service.getNearbyStops(22.5726, 88.3639);
+  final location = await ref.watch(userLocationProvider.future);
+  return ref.watch(nearbyServiceProvider).getNearbyStops(location.latitude, location.longitude);
+});
+
+/// The city the user is in, read off the nearest stops rather than a geocoder.
+///
+/// The header said "Where to, Kolkata?" to everyone, including someone in
+/// Bengaluru. Stops carry city/district/state, so the nearest one that has any
+/// of them names the area — no extra request, no external geocoding service.
+/// Null when the fallback position is in use or no stop names its area: the
+/// header then just asks "Where to?" instead of claiming a city.
+final homeAreaProvider = Provider.autoDispose<String?>((ref) {
+  final location = ref.watch(userLocationProvider).valueOrNull;
+  if (location == null || !location.isLive) return null;
+
+  final places = ref.watch(homeNearbyStationsProvider).valueOrNull?.data ?? const <Place>[];
+  for (final place in places) {
+    final area = place.areaName;
+    if (area != null) return area;
+  }
+  return null;
 });
 
 // Fetch saved routes/favorites
@@ -25,10 +44,53 @@ final homeSavedRoutesProvider = FutureProvider.autoDispose<ApiResponse<List<Rout
 });
 
 // Fetch system confidence/reliability
-final homeConfidenceProvider = FutureProvider.autoDispose<ApiResponse<Map<String, dynamic>>>((ref) async {
-  final service = ref.watch(analyticsServiceProvider);
-  return service.getPopularityMetrics();
+final homeRouteCountProvider = FutureProvider.autoDispose<ApiResponse<int>>((ref) async {
+  return ref.watch(transitServiceProvider).getRouteCount();
 });
+
+/// Shown when the device has moved away from the position the screen was built
+/// from. The refresh is offered rather than taken: reloading under someone
+/// mid-scroll is worse than a stale heading they can see is stale.
+class _MovedBanner extends ConsumerWidget {
+  final UserLocation to;
+
+  const _MovedBanner({required this.to});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: RatrooTheme.confidenceMedFill.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.my_location, size: 20, color: RatrooTheme.confidenceMedText),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'You have moved since this loaded.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: RatrooTheme.confidenceMedText),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              // Clearing the drift first stops the banner reappearing against
+              // the position it was raised about.
+              ref.read(locationDriftProvider.notifier).state = null;
+              ref.invalidate(userLocationProvider);
+              ref.invalidate(homeNearbyStationsProvider);
+            },
+            child: const Text('Refresh'),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 200.ms);
+  }
+}
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -41,12 +103,12 @@ class HomeScreen extends ConsumerWidget {
           onRefresh: () async {
             ref.invalidate(homeNearbyStationsProvider);
             ref.invalidate(homeSavedRoutesProvider);
-            ref.invalidate(homeConfidenceProvider);
+            ref.invalidate(homeRouteCountProvider);
           },
           child: ListView(
             padding: const EdgeInsets.all(24.0),
             children: [
-              _buildHeader(context),
+              _buildHeader(context, ref),
               const SizedBox(height: 24),
               _buildSearchBar(context),
               const SizedBox(height: 32),
@@ -63,11 +125,22 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final area = ref.watch(homeAreaProvider);
+    final drift = ref.watch(locationDriftProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // The mark on transparency, so it sits on the page rather than in a
+        // white tile of its own.
+        Image.asset(
+          'assets/brand/ratroo_logo.png',
+          height: 34,
+          semanticLabel: 'Ratroo',
+        ).animate().fadeIn().scale(begin: const Offset(0.9, 0.9)),
+        const SizedBox(height: 12),
         RichText(
           text: TextSpan(
             style: GoogleFonts.outfit(
@@ -75,23 +148,33 @@ class HomeScreen extends ConsumerWidget {
               fontWeight: FontWeight.bold,
               color: theme.colorScheme.onSurface,
             ),
-            children: const [
-              TextSpan(text: 'Where to, '),
-              TextSpan(
-                text: 'Kolkata?',
-                style: TextStyle(color: RatrooTheme.primaryColor),
-              ),
+            children: [
+              const TextSpan(text: 'Where to'),
+              // No city rather than the wrong city when we cannot name one.
+              if (area == null)
+                const TextSpan(text: '?')
+              else ...[
+                const TextSpan(text: ', '),
+                TextSpan(
+                  text: '$area?',
+                  style: const TextStyle(color: RatrooTheme.primaryColor),
+                ),
+              ],
             ],
           ),
         ).animate().fadeIn().slideY(begin: -0.2, end: 0),
         const SizedBox(height: 8),
         Text(
-          'Your reliable coverage for West Bengal transit.',
+          'Live bus, metro, rail and ferry across West Bengal.',
           style: GoogleFonts.inter(
             fontSize: 16,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ).animate().fadeIn(delay: 100.ms).slideY(begin: -0.2, end: 0),
+        if (drift != null) ...[
+          const SizedBox(height: 16),
+          _MovedBanner(to: drift),
+        ],
       ],
     );
   }
@@ -99,7 +182,7 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildSearchBar(BuildContext context) {
     final theme = Theme.of(context);
     return GestureDetector(
-      onTap: () => context.push('/journey-planner'),
+      onTap: () => context.push('/assistant'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
@@ -118,7 +201,7 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Search destination, stop, or route',
+                'Ask anything — "Sealdah theke Bongaon"',
                 style: GoogleFonts.inter(
                   fontSize: 16,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -256,15 +339,21 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  /// Real coverage, not a status light.
+  ///
+  /// This section used to read "System Status: Normal Operations — 95%
+  /// Reliable". Both values were defaults for an endpoint that returns 501, so
+  /// the figure never changed and measured nothing. A route count is a fact we
+  /// actually hold.
   Widget _buildTransitReliability(BuildContext context, WidgetRef ref) {
-    final confidenceAsync = ref.watch(homeConfidenceProvider);
+    final countAsync = ref.watch(homeRouteCountProvider);
     final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Transit Reliability',
+          'Coverage',
           style: GoogleFonts.outfit(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -272,41 +361,48 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
-        confidenceAsync.when(
+        countAsync.when(
           data: (response) {
-            final data = response.data ?? {};
-            final score = (data['reliabilityScore'] as num?)?.toDouble() ?? 0.95;
-            final description = data['statusDescription'] as String? ?? 'Normal Operations';
-            
+            final count = response.data;
+            if (count == null) {
+              return GlassContainer(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Could not load coverage right now.',
+                  style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.onSurface),
+                ),
+              );
+            }
+
             return GlassContainer(
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
+                  Icon(Icons.route_outlined, color: theme.colorScheme.primary),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'System Status',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          description,
+                          '$count routes mapped',
                           style: GoogleFonts.outfit(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.onSurface,
                           ),
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Bus, metro, rail and ferry across West Bengal. '
+                          'Not every route has a published timetable yet.',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                  ConfidenceGauge(
-                    score: score,
                   ),
                 ],
               ),
@@ -498,7 +594,8 @@ class HomeScreen extends ConsumerWidget {
       indicatorColor: theme.colorScheme.primary.withValues(alpha: 0.1),
       selectedIndex: 2,
       onDestinationSelected: (index) {
-        if (index == 0) context.push('/route-details?id=019fbd03-cfac-72fb-b48f-21bb81b73f76');
+        // Was a hardcoded route uuid that 404s once that row is reprojected.
+        if (index == 0) context.push('/nearby');
         if (index == 1) context.push('/journey-planner');
         if (index == 3) context.push('/nearby');
         if (index == 4) context.push('/profile');

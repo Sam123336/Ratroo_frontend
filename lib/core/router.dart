@@ -6,6 +6,7 @@ import '../screens/place_details_screen.dart';
 import '../screens/rural_connectivity_screen.dart';
 import '../screens/nearby_explorer_screen.dart';
 import '../screens/analytics_screen.dart';
+import '../screens/assistant_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/profile_screen.dart';
 
@@ -39,6 +40,10 @@ final goRouter = GoRouter(
     GoRoute(
       path: '/analytics',
       builder: (context, state) => const AnalyticsScreen(),
+    ),
+    GoRoute(
+      path: '/assistant',
+      builder: (context, state) => const AssistantScreen(),
     ),
     GoRoute(
       path: '/auth',
