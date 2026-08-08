@@ -101,6 +101,14 @@ class HomeScreen extends ConsumerWidget {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
+            // Location first: pulling to refresh re-read the stops but kept the
+            // old position, so a user who had travelled saw the same city
+            // however many times they pulled.
+            ref.read(locationDriftProvider.notifier).state = null;
+            // Forced: the service holds a fix for two minutes, and a deliberate
+            // pull should not be answered from that cache.
+            await ref.read(locationServiceProvider).current(forceRefresh: true);
+            ref.invalidate(userLocationProvider);
             ref.invalidate(homeNearbyStationsProvider);
             ref.invalidate(homeSavedRoutesProvider);
             ref.invalidate(homeRouteCountProvider);
