@@ -11,23 +11,31 @@ import '../core/api_client.dart';
 import '../core/theme.dart';
 import '../core/transit_icons.dart';
 import '../providers/api_providers.dart';
+import '../services/nearby_service.dart';
 import '../widgets/glass_container.dart';
 
 // Uses the device's real position. This was hardcoded to Kolkata centre, so a
 // user in Bardhaman was shown stops 100km away labelled "Nearby".
 final nearbyPlacesProvider =
-    FutureProvider.autoDispose.family<ApiResponse<List<Place>>, String?>((ref, mode) async {
+    FutureProvider.autoDispose.family<ApiResponse<NearbyResult>, String?>((ref, mode) async {
   final location = await ref.watch(userLocationProvider.future);
+  final service = ref.watch(nearbyServiceProvider);
 
-  // Bus stops are everywhere; a ferry ghat is not. Searching the same 1 km for
-  // both meant "Nearby Ferry" was empty in a city with working ferries, since
-  // the whole state holds only about twenty ghats. Filtered searches reach
-  // further, and the screen says how far it looked.
-  final radius = mode == null ? 1000 : 25000;
+  // Bus stops are everywhere; a ferry ghat is not, and in rural districts the
+  // nearest stop of any kind can be 10 km away. Unfiltered searches widen
+  // until they find something; a mode filter goes straight to the wide radius
+  // because there are only ~20 ghats in the whole state.
+  if (mode != null) {
+    final response = await service.getNearbyStops(
+        location.latitude, location.longitude, radius: 25000);
+    return ApiResponse(
+      success: response.success,
+      error: response.error,
+      data: NearbyResult(places: response.data ?? const [], radiusMetres: 25000),
+    );
+  }
 
-  return ref
-      .watch(nearbyServiceProvider)
-      .getNearbyStops(location.latitude, location.longitude, radius: radius);
+  return service.findNearest(location.latitude, location.longitude);
 });
 
 /// Up to three services, then a count of the rest. Capped because a Kolkata
@@ -141,9 +149,10 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
       ),
       body: nearbyPlacesAsync.when(
         data: (apiResponse) {
-          final places = _applyModeFilter(apiResponse.data ?? []);
+          final result = apiResponse.data;
+          final places = _applyModeFilter(result?.places ?? const []);
           final body = places.isEmpty
-              ? _buildEmptyState()
+              ? _buildEmptyState(result)
               : _isMapMode
                   ? _buildMapMode(places)
                   : _buildListMode(places);
@@ -269,7 +278,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
   }
 
   Widget _buildMapMode(List<Place> places) {
-    if (places.isEmpty) return _buildEmptyState();
+    if (places.isEmpty) return _buildEmptyState(null);
     
     // Default to first place location or standard center
     final center = LatLng(places.first.lat ?? 0.0, places.first.lon ?? 0.0);
@@ -396,7 +405,10 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState([NearbyResult? result]) {
+    // How far the search actually reached, so "nothing here" reads as a fact
+    // about the area rather than a broken screen.
+    final radius = result?.radiusLabel ?? '30 km';
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -409,8 +421,8 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
           const SizedBox(height: 16),
           Text(
             widget.mode == null
-                ? 'No places found nearby'
-                : 'No ${_modeLabel(widget.mode!).toLowerCase()} stops nearby',
+                ? 'No stops within $radius'
+                : 'No ${_modeLabel(widget.mode!).toLowerCase()} stops within $radius',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -418,7 +430,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
           const SizedBox(height: 8),
           Text(
             widget.mode == null
-                ? 'Try adjusting your location or check back later.'
+                ? 'Ratroo looked out to $radius and found nothing mapped here yet.'
                 // Only bus data has been ingested into the stops table so far.
                 : 'Only bus stops have been imported so far. Ferry, rail and metro coverage is still being ingested.',
             textAlign: TextAlign.center,

@@ -90,6 +90,18 @@ class _RouteBody extends ConsumerWidget {
                 spacing: RatrooTheme.space2,
                 runSpacing: RatrooTheme.space2,
                 children: [
+                  // The name on the bus leads when we have it: at a West
+                  // Bengal stand you board "APANJAN", not a route code. Only
+                  // WBBUS and BUSSATHI record one, so most routes show none.
+                  if (route.busLabel != null)
+                    Chip(
+                      avatar: const Icon(Icons.directions_bus_filled, size: 16),
+                      label: Text(route.busLabel!),
+                      backgroundColor: RatrooTheme.accentColor.withValues(alpha: 0.12),
+                      labelStyle: theme.textTheme.labelMedium
+                          ?.copyWith(color: RatrooTheme.accentDeep),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   Chip(
                     avatar: const Icon(Icons.business, size: 16),
                     label: Text(route.providerCode),
@@ -121,11 +133,19 @@ class _RouteBody extends ConsumerWidget {
                   style: theme.textTheme.bodyMedium,
                 )
               else
-                _StopsTimeline(stops: route.stops, elapsed: route.elapsedMinutes),
+                _StopsTimeline(
+                  stops: route.stops,
+                  // A column of dashes tells the rider nothing. When no stop on
+                  // the route has a time, the notice below says so once and
+                  // both time columns are dropped entirely.
+                  elapsed: route.hasNoTimes ? const [] : route.elapsedMinutes,
+                  hideTimes: route.hasNoTimes,
+                ),
               const SizedBox(height: RatrooTheme.space4),
               Text(
                 timed == 0
-                    ? 'Times not published for this route. Source: ${route.providerCode}.'
+                    ? '${route.providerCode} does not publish times for this '
+                        'route, so the stop order is shown without them.'
                     : 'Scheduled times from ${route.providerCode}. Buses run to traffic, '
                         'not to the minute.',
                 style: theme.textTheme.labelMedium
@@ -134,11 +154,23 @@ class _RouteBody extends ConsumerWidget {
               // Shown only when the operator's URL is recorded and confirmed.
               // The button used to be unconditional and always answered with a
               // snackbar saying no URL existed.
-              if (route.providerWebsite != null)
+              if (route.bestSourceUrl != null)
                 TextButton.icon(
-                  onPressed: () => _openSite(context, route.providerWebsite!),
+                  onPressed: () => _openSite(context, route.bestSourceUrl!),
                   icon: const Icon(Icons.open_in_new, size: 16),
-                  label: Text('Open ${route.providerCode} website'),
+                  // Names what will open. The deep link lands on this route's
+                  // own timetable; the fallback is the operator's front page,
+                  // where the user would have to search for it again.
+                  // Promises only what opens: this route's page, the
+                  // operator's route list, or its front door.
+                  label: Text(switch (route.sourceKind) {
+                    'route' => 'View this route on ${route.providerCode}',
+                    // A cross-operator index, so it is not named after this
+                    // route's own operator.
+                    'search' => 'All buses on this route (WBBus.in)',
+                    'index' => 'All ${route.providerCode} routes',
+                    _ => 'Open ${route.providerCode} website',
+                  }),
                 ),
               const SizedBox(height: RatrooTheme.space8),
             ],
@@ -243,7 +275,14 @@ class _StopsTimeline extends StatelessWidget {
   /// Minutes from the first stop, aligned to [stops]. Null where unknown.
   final List<int?> elapsed;
 
-  const _StopsTimeline({required this.stops, required this.elapsed});
+  /// True when not one stop has a time, so both time columns are dropped.
+  final bool hideTimes;
+
+  const _StopsTimeline({
+    required this.stops,
+    required this.elapsed,
+    this.hideTimes = false,
+  });
 
   /// "Start", "10 mins", "1h 45m" — the trailing column on the board.
   static String? _elapsedLabel(int? minutes, bool isFirst) {
@@ -266,21 +305,25 @@ class _StopsTimeline extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(
-                  width: 52,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      stops[i].departureTime ?? '—',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: stops[i].departureTime == null
-                            ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                            : theme.colorScheme.onSurface,
+                // Dropped entirely when the operator publishes no times for
+                // this route: a column of 15 dashes is noise, and the notice
+                // under the list already explains why there are none.
+                if (!hideTimes)
+                  SizedBox(
+                    width: 52,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        stops[i].departureTime ?? '—',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: stops[i].departureTime == null
+                              ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                              : theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
-                ),
                 _Rail(isFirst: i == 0, isLast: i == stops.length - 1),
                 Expanded(
                   child: Padding(

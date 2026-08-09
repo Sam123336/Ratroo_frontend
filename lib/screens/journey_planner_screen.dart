@@ -25,6 +25,51 @@ final searchSuggestionsProvider = FutureProvider.autoDispose.family<ApiResponse<
   return await searchService.searchPlaces(query);
 });
 
+/// The stop the user is standing closest to, widening the search until it
+/// finds one. Used to fill "From" so nobody has to type where they already are.
+final nearestStopProvider = FutureProvider.autoDispose<Place?>((ref) async {
+  final location = await ref.watch(userLocationProvider.future);
+  if (!location.isLive) return null; // Never guess from the Kolkata fallback.
+
+  final result = await ref
+      .watch(nearbyServiceProvider)
+      .findNearest(location.latitude, location.longitude);
+
+  return result.data?.places.firstOrNull;
+});
+
+/// Where you can actually get to from a stop, in one ride.
+///
+/// Taken from the destinations of the services that call there — the headsign
+/// of each departure, then the far end of each route. Nothing is inferred:
+/// every name here is the end of a real service from this stop.
+final reachableFromProvider =
+    FutureProvider.autoDispose.family<List<String>, String>((ref, stopId) async {
+  final response = await ref.watch(searchServiceProvider).getPlaceById(stopId);
+  final place = response.data;
+  if (place == null) return const [];
+
+  final seen = <String>{};
+  final destinations = <String>[];
+
+  void add(String? name) {
+    final value = name?.trim();
+    if (value == null || value.isEmpty) return;
+    // Where you already are is not somewhere to go.
+    if (value.toLowerCase() == place.canonicalName.toLowerCase()) return;
+    if (seen.add(value.toLowerCase())) destinations.add(value);
+  }
+
+  for (final departure in place.departures) {
+    add(departure.headsign);
+  }
+  for (final route in place.routes) {
+    add(route.shortLabelAt(place.canonicalName));
+  }
+
+  return destinations;
+});
+
 // FutureProvider for final journey plans
 final journeyResultsProvider = FutureProvider.autoDispose<ApiResponse<List<JourneyPlanModel>>>((ref) async {
   final fromPlace = ref.watch(selectedFromPlaceProvider);
@@ -50,6 +95,20 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
   final FocusNode _fromFocus = FocusNode();
   final FocusNode _toFocus = FocusNode();
   String _selectedFilter = 'Fastest';
+
+  /// Set once the nearest stop has been used to fill "From", so a later
+  /// location refresh cannot overwrite something the user typed.
+  bool _prefilled = false;
+
+  /// Fills "From" with the nearest stop. Silent when the user has already
+  /// typed there, or when we have no live fix — filling in the Kolkata
+  /// fallback would send someone in Bardhaman on a journey from Esplanade.
+  void _prefillFrom(Place stop) {
+    if (_prefilled || _fromController.text.isNotEmpty) return;
+    _prefilled = true;
+    _fromController.text = stop.canonicalName;
+    ref.read(selectedFromPlaceProvider.notifier).state = stop;
+  }
 
   @override
   void initState() {
@@ -203,20 +262,105 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
             ),
           ],
           
+          // Was a line of grey text telling the user to type. It now offers
+          // the nearest stop and the places you can actually reach from it.
           if (activeField == null && !showJourneyResults)
-            const Expanded(
-              child: Center(
-                child: Text(
-                  'Enter departure and destination points to plan your trip.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ),
+            Expanded(child: _buildStartSuggestions()),
         ],
       ),
     );
   }
+
+  /// The opening state: your nearest stop, and where its services go.
+  Widget _buildStartSuggestions() {
+    final theme = Theme.of(context);
+
+    return ref.watch(nearestStopProvider).when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, _) => _startHint(theme),
+          data: (stop) {
+            if (stop == null) return _startHint(theme);
+
+            // Fill "From" as soon as we know where they are. Deferred to after
+            // the frame: setting a controller during build throws.
+            WidgetsBinding.instance.addPostFrameCallback((_) => _prefillFrom(stop));
+
+            return ListView(
+              padding: const EdgeInsets.all(RatrooTheme.space4),
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.my_location, size: 18, color: RatrooTheme.primaryColor),
+                    const SizedBox(width: RatrooTheme.space2),
+                    Expanded(
+                      child: Text(
+                        'Nearest stop: ${stop.canonicalName}'
+                        '${stop.distanceLabel == null ? "" : " · ${stop.distanceLabel}"}',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: RatrooTheme.space4),
+                Text('Where can you go from here', style: theme.textTheme.titleMedium),
+                const SizedBox(height: RatrooTheme.space3),
+                ref.watch(reachableFromProvider(stop.id)).when(
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: RatrooTheme.space4),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (_, _) => Text('Could not load destinations.',
+                          style: theme.textTheme.bodyMedium),
+                      data: (destinations) {
+                        if (destinations.isEmpty) {
+                          return Text(
+                            'No services from ${stop.canonicalName} are mapped yet, '
+                            'so type a destination instead.',
+                            style: theme.textTheme.bodyMedium,
+                          );
+                        }
+
+                        return Wrap(
+                          spacing: RatrooTheme.space2,
+                          runSpacing: RatrooTheme.space2,
+                          children: [
+                            for (final destination in destinations.take(16))
+                              ActionChip(
+                                label: Text(destination),
+                                avatar: const Icon(Icons.arrow_forward, size: 15),
+                                onPressed: () => _planTo(destination),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+              ],
+            );
+          },
+        );
+  }
+
+  /// Fills "To" with a suggested destination and plans straight away — the
+  /// point of a suggestion is not having to type it.
+  void _planTo(String destination) {
+    _toController.text = destination;
+    ref.read(selectedToPlaceProvider.notifier).state =
+        Place(id: '', canonicalName: destination);
+    ref.read(activeSearchFieldProvider.notifier).state = null;
+    _toFocus.unfocus();
+    setState(() {});
+  }
+
+  Widget _startHint(ThemeData theme) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(RatrooTheme.space6),
+          child: Text(
+            'Enter a departure and destination to plan your trip.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+      );
 
   Widget _buildSuggestionsList(String query, String field) {
     if (query.trim().isEmpty) {

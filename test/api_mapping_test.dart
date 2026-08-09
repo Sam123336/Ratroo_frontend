@@ -194,4 +194,78 @@ void main() {
     // Without a start there is nothing to measure from, so no number is shown.
     expect(route.elapsedMinutes, [null, null]);
   });
+
+  test('route carries the name painted on the bus when the operator records one', () {
+    final route = RouteModel.fromJson({
+      'id': '019fbcff-4465-7d29-8984-919c24b82be8',
+      'providerCode': 'WBBUS',
+      'originName': 'Gopiballabpur',
+      'destinationName': 'Khatra',
+      'operator': 'AADITRI',
+      'vehicle': 'WB49C7440',
+      'stops': [
+        {'name': 'Gopiballabpur', 'stopSequence': 1, 'departureTime': '06:00'},
+      ],
+    });
+
+    expect(route.busLabel, 'AADITRI · WB49C7440');
+    expect(route.hasNoTimes, isFalse);
+  });
+
+  test('WBTC routes have no bus name and often no times, and say neither', () {
+    // Verbatim shape of a WBTC route: 0 of 132 trips carry a vehicleName, and
+    // this one publishes no times either.
+    final route = RouteModel.fromJson({
+      'id': 'r-wbtc',
+      'providerCode': 'WBTC',
+      'originName': 'Baruipur',
+      'destinationName': 'Howrah',
+      'operator': null,
+      'vehicle': null,
+      'stops': [
+        {'name': 'Baruipur', 'stopSequence': 1, 'departureTime': null},
+        {'name': 'Shibanipith', 'stopSequence': 2, 'departureTime': null},
+      ],
+    });
+
+    expect(route.busLabel, isNull);
+    // Every stop dashless, so the screen drops the elapsed column entirely.
+    expect(route.hasNoTimes, isTrue);
+  });
+
+  test('route links to its own page on the operator site, not a search form', () {
+    final route = RouteModel.fromJson({
+      'id': 'r1',
+      'providerCode': 'WBBUS',
+      'providerWebsite': 'https://wbbus.in',
+      'sourceUrl': 'https://wbbus.in/bus/aniket-wb41g0280-barakar-arambagh-81',
+      'sourceIsExact': true,
+      'originName': 'Barakar',
+      'destinationName': 'Arambagh',
+    });
+
+    expect(route.bestSourceUrl, endsWith('/bus/aniket-wb41g0280-barakar-arambagh-81'));
+    expect(route.sourceIsExact, isTrue);
+  });
+
+  test('WBTC gets its route list, flagged as not this-route-only', () {
+    // WBTC search is POST-only, so there is no page per route. Its published
+    // list of every city bus route is the closest thing.
+    final route = RouteModel.fromJson({
+      'id': 'r2',
+      'providerCode': 'WBTC',
+      'providerWebsite': 'https://wbtconline.in',
+      'sourceUrl': 'https://wbtconline.in/wbtc-city-bus-routes',
+      'sourceIsExact': false,
+    });
+
+    expect(route.bestSourceUrl, endsWith('/wbtc-city-bus-routes'));
+    // The label must not promise "view this route".
+    expect(route.sourceIsExact, isFalse);
+  });
+
+  test('offers nothing when the operator has neither', () {
+    final route = RouteModel.fromJson({'id': 'r3', 'providerCode': 'SBSTC'});
+    expect(route.bestSourceUrl, isNull);
+  });
 }

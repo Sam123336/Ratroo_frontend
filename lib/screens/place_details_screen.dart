@@ -218,13 +218,21 @@ class _PlaceBody extends ConsumerWidget {
           style: theme.textTheme.labelMedium
               ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
         ),
-        // Only offered when the provider registry actually holds a URL —
-        // never a guessed one.
-        ...withSite.map((s) => TextButton.icon(
-              onPressed: () => _openSite(context, s.website!),
-              icon: const Icon(Icons.open_in_new, size: 16),
-              label: Text('${s.name} website'),
-            )),
+        // The stop's own timetable page when the operator publishes one, so
+        // the link does not dump the user on a search form. Falls back to the
+        // operator's front page, and to nothing when neither is recorded.
+        if (place.sourceUrl != null)
+          TextButton.icon(
+            onPressed: () => _openSite(context, place.sourceUrl!),
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: Text('${place.canonicalName} timetable on WBBUS'),
+          )
+        else
+          ...withSite.map((s) => TextButton.icon(
+                onPressed: () => _openSite(context, s.website!),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text('${s.name} website'),
+              )),
       ],
     );
   }

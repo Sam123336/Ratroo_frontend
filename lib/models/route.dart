@@ -54,6 +54,25 @@ class RouteModel {
   /// The operator's own site, or null when none is recorded.
   final String? providerWebsite;
 
+  /// The best page the operator has for this route — its own timetable when
+  /// there is one, otherwise the closest listing.
+  final String? sourceUrl;
+
+  /// What [sourceUrl] opens: 'route' (this route's own page), 'search' (every
+  /// bus on this corridor, across operators), 'index' (the operator's route
+  /// list) or 'site' (its front page).
+  final String sourceKind;
+
+  /// True when [sourceUrl] is the page for THIS route, not a route index.
+  /// Only WBBUS publishes per-route pages; WBTC has one list of all routes,
+  /// and the rest have nothing addressable.
+  final bool sourceIsExact;
+
+  /// The name painted on the bus, e.g. "APANJAN", and its registration.
+  /// Only WBBUS and BUSSATHI record these; null everywhere else.
+  final String? operator;
+  final String? vehicle;
+
   /// The operator's own description, e.g. "JINIA: Bankura to Durgapur".
   final String longName;
   final String originId;
@@ -67,6 +86,11 @@ class RouteModel {
     required this.routeCode,
     required this.providerCode,
     this.providerWebsite,
+    this.sourceUrl,
+    this.sourceIsExact = false,
+    this.sourceKind = 'site',
+    this.operator,
+    this.vehicle,
     this.longName = '',
     required this.originId,
     required this.destinationId,
@@ -85,6 +109,22 @@ class RouteModel {
     if (originName != null) return 'From $originName';
     return routeCode.isEmpty ? 'Route' : routeCode;
   }
+
+  /// "APANJAN · WB67D5949", or null when the operator was never recorded.
+  /// Where "see the source" should go: the route's own page on the operator's
+  /// site when there is one, else its front page, else nowhere.
+  String? get bestSourceUrl => sourceUrl ?? providerWebsite;
+
+  String? get busLabel {
+    final name = operator?.trim();
+    if (name == null || name.isEmpty) return null;
+    final reg = vehicle?.trim();
+    return reg == null || reg.isEmpty ? name : '$name · $reg';
+  }
+
+  /// True when not one stop on this route has a published time, so the whole
+  /// elapsed column would be dashes.
+  bool get hasNoTimes => stops.every((s) => s.departureTime == null);
 
   /// Minutes from the first stop to each stop, or null where either end has no
   /// published time. Wraps midnight, since overnight services are common here.
@@ -118,6 +158,11 @@ class RouteModel {
       routeCode: json['routeCode'] ?? '',
       providerCode: json['providerCode'] ?? '',
       providerWebsite: json['providerWebsite'] as String?,
+      sourceUrl: json['sourceUrl'] as String?,
+      sourceIsExact: json['sourceIsExact'] == true,
+      sourceKind: json['sourceKind'] as String? ?? 'site',
+      operator: json['operator'] as String?,
+      vehicle: json['vehicle'] as String?,
       longName: json['longName'] as String? ?? '',
       originId: json['originId'] ?? '',
       destinationId: json['destinationId'] ?? '',

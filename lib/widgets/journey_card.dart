@@ -6,15 +6,15 @@ import '../models/journey.dart';
 
 /// One journey option: a summary strip, then a leg-by-leg timeline.
 ///
-/// Modelled on the reference board — mode icon, what to board, where it goes,
-/// how long — because a rider decides between options on exactly those. Times
-/// of day are deliberately absent: the planner does not return them, and a
-/// made-up departure sends someone to an empty stop.
+/// Modelled on the reference board: when it leaves, what to board, where it
+/// goes, how long. Times come from the operator's timetable and are simply
+/// absent on services that publish none — never computed from the journey's
+/// own estimate, which would look identical to a real departure.
 class JourneyCard extends StatelessWidget {
   final JourneyPlanModel plan;
 
-  /// Highlights the first option and labels it. The planner returns options
-  /// best-first, so this is a statement about ordering, not a quality score.
+  /// Highlights the first option. The planner returns them fastest first, then
+  /// by departure — so this is a statement about ordering, not a quality score.
   final bool isBest;
 
   const JourneyCard({super.key, required this.plan, this.isBest = false});
@@ -78,7 +78,14 @@ class JourneyCard extends StatelessWidget {
                 ),
               ),
             ),
-          Text(plan.durationLabel, style: theme.textTheme.titleLarge),
+          // The departure leads when the operator publishes one: "which bus,
+          // when" is the question, and duration alone never answered it.
+          if (plan.departureTime != null) ...[
+            Text(plan.departureTime!, style: theme.textTheme.titleLarge),
+            const SizedBox(width: RatrooTheme.space2),
+            Text(plan.durationLabel, style: theme.textTheme.labelMedium),
+          ] else
+            Text(plan.durationLabel, style: theme.textTheme.titleLarge),
           const Spacer(),
           if (fare != null) ...[
             Text(fare, style: theme.textTheme.titleMedium),
@@ -158,6 +165,14 @@ class _LegRow extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Boarding time first on a timed service, as on a
+                      // printed timetable.
+                      if (leg.departureTime != null) ...[
+                        Text(leg.departureTime!,
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                        const SizedBox(width: RatrooTheme.space2),
+                      ],
                       Expanded(
                         child: Text(
                           leg.isWalk ? leg.walkLabel : (leg.routeCode ?? 'Service'),

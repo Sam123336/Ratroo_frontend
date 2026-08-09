@@ -45,6 +45,15 @@ class JourneyPlanModel {
 
   bool get fareIsEstimated => fareSources.any((s) => s.contains('ESTIMATED'));
 
+  /// When the first timed service leaves, or null when nothing on this
+  /// journey has a published time.
+  String? get departureTime {
+    for (final leg in legs) {
+      if (leg.departureTime != null) return leg.departureTime;
+    }
+    return null;
+  }
+
   /// The modes used, in order, for the icon strip on a collapsed card.
   List<String> get modeSequence => legs.map((l) => l.mode).toList();
 
@@ -86,6 +95,11 @@ class JourneyLegModel {
   final int durationSeconds;
   final double? fareINR;
 
+  /// Scheduled "HH:MM" at the boarding and alighting stops. Null on walking
+  /// legs and on services whose operator publishes no timetable.
+  final String? departureTime;
+  final String? arrivalTime;
+
   JourneyLegModel({
     required this.mode,
     required this.fromPlaceId,
@@ -97,6 +111,8 @@ class JourneyLegModel {
     this.providerCode,
     this.distanceKm,
     this.fareINR,
+    this.departureTime,
+    this.arrivalTime,
     required this.durationSeconds,
   });
 
@@ -150,6 +166,8 @@ class JourneyLegModel {
       providerCode: json['providerCode'],
       distanceKm: json['distanceKm']?.toString(),
       fareINR: (json['fareINR'] as num?)?.toDouble(),
+      departureTime: json['departureTime'] as String?,
+      arrivalTime: json['arrivalTime'] as String?,
       durationSeconds: json['durationSeconds'] ??
           ((json['durationMinutes'] as num?)?.round() ?? 0) * 60,
     );

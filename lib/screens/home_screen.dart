@@ -7,16 +7,19 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/api_providers.dart';
 import '../models/coverage_summary.dart';
 import '../models/place.dart';
+import '../services/nearby_service.dart';
 import '../models/route.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../core/location_service.dart';
 import '../widgets/glass_container.dart';
 
-// Stops around wherever the user actually is.
-final homeNearbyStationsProvider = FutureProvider.autoDispose<ApiResponse<List<Place>>>((ref) async {
+// Stops around wherever the user actually is, widening the search until it
+// finds some. In rural West Bengal the nearest stop can be 10 km away.
+final homeNearbyStationsProvider =
+    FutureProvider.autoDispose<ApiResponse<NearbyResult>>((ref) async {
   final location = await ref.watch(userLocationProvider.future);
-  return ref.watch(nearbyServiceProvider).getNearbyStops(location.latitude, location.longitude);
+  return ref.watch(nearbyServiceProvider).findNearest(location.latitude, location.longitude);
 });
 
 /// The city the user is in, read off the nearest stops rather than a geocoder.
@@ -30,7 +33,8 @@ final homeAreaProvider = Provider.autoDispose<String?>((ref) {
   final location = ref.watch(userLocationProvider).valueOrNull;
   if (location == null || !location.isLive) return null;
 
-  final places = ref.watch(homeNearbyStationsProvider).valueOrNull?.data ?? const <Place>[];
+  final places =
+      ref.watch(homeNearbyStationsProvider).valueOrNull?.data?.places ?? const <Place>[];
   for (final place in places) {
     final area = place.areaName;
     if (area != null) return area;
@@ -318,12 +322,15 @@ class HomeScreen extends ConsumerWidget {
         const SizedBox(height: 16),
         nearbyAsync.when(
           data: (response) {
-            final stops = response.data ?? [];
+            final result = response.data;
+            final stops = result?.places ?? const <Place>[];
             if (stops.isEmpty) {
+              // Says how far it looked, so "none" reads as a fact about the
+              // area rather than a broken screen.
               return _buildEmptyState(
                 context,
                 icon: Icons.location_off,
-                message: 'No nearby stations found.',
+                message: 'No stops within ${result?.radiusLabel ?? "30 km"} of you.',
               );
             }
             // Only the modes that actually run here. This row was a fixed
@@ -343,13 +350,20 @@ class HomeScreen extends ConsumerWidget {
               );
             }
 
-            return Row(
-              mainAxisAlignment: chips.length < 3
-                  ? MainAxisAlignment.start
-                  : MainAxisAlignment.spaceBetween,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final chip in chips)
-                  _buildTransitMode(context, chip.value.$1, chip.value.$2, chip.key),
+                if (result != null && result.widened) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: RatrooTheme.space3),
+                    child: Text(
+                      'Nothing within 1 km — showing services within '
+                      '${result.radiusLabel}.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+                _modeRow(context, chips),
               ],
             );
           },
@@ -361,6 +375,19 @@ class HomeScreen extends ConsumerWidget {
         ),
       ],
     ).animate().fadeIn(delay: 300.ms);
+  }
+
+  /// The mode circles themselves, split out so the widened-search note can sit
+  /// above them without nesting the whole row another level deep.
+  Widget _modeRow(BuildContext context, List<MapEntry<String, (IconData, String)>> chips) {
+    return Row(
+      mainAxisAlignment:
+          chips.length < 3 ? MainAxisAlignment.start : MainAxisAlignment.spaceBetween,
+      children: [
+        for (final chip in chips)
+          _buildTransitMode(context, chip.value.$1, chip.value.$2, chip.key),
+      ],
+    );
   }
 
   /// The tinted circle used before photos, kept for modes without one.

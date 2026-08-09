@@ -130,6 +130,9 @@ class Place {
   final List<Departure> departures;
   final List<PlaceSource> sources;
 
+  /// The operator's timetable page for this stop, when it publishes one.
+  final String? sourceUrl;
+
   /// Straight-line metres from the search centre. Only /v1/stops/nearby sends
   /// this; null everywhere else.
   final double? distanceMetres;
@@ -149,6 +152,7 @@ class Place {
     this.routes = const [],
     this.departures = const [],
     this.sources = const [],
+    this.sourceUrl,
     this.distanceMetres,
     this.city,
     this.district,
@@ -220,6 +224,7 @@ class Place {
       routes: _list(json['routes'], PlaceRoute.fromJson),
       departures: _list(json['departures'], Departure.fromJson),
       sources: _list(json['sources'], PlaceSource.fromJson),
+      sourceUrl: json['sourceUrl'] as String?,
       distanceMetres: (json['distanceMeters'] as num?)?.toDouble(),
       city: json['city'] as String?,
       district: json['district'] as String?,
