@@ -9,6 +9,9 @@ import '../core/location_service.dart';
 import '../core/transit_icons.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
+import '../core/app_icons.dart';
+import '../widgets/status_view.dart';
+import '../widgets/skeleton.dart';
 
 // Fetch by id. This used to call searchPlaces(id) — searching for a UUID by
 // name — so the screen could only ever render "No details found".
@@ -33,9 +36,10 @@ class PlaceDetailsScreen extends ConsumerWidget {
     if (placeId == null || placeId!.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Stop')),
-        body: _Message(
-          icon: Icons.location_off_outlined,
-          text: 'No stop was selected.',
+        body: const StatusView(
+          kind: StatusKind.noLocation,
+          message: 'No stop was selected.',
+          detail: 'Open a stop from search or the nearby list.',
         ),
       );
     }
@@ -51,17 +55,18 @@ class PlaceDetailsScreen extends ConsumerWidget {
           data: (response) {
             final place = response.data;
             if (place == null) {
-              return _Message(
-                icon: Icons.search_off,
-                text: response.error ?? 'We have no details for this stop yet.',
+              return StatusView(
+                kind: StatusKind.empty,
+                message: 'We have no details for this stop yet.',
+                detail: response.error,
               );
             }
             return _PlaceBody(place: place);
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => _Message(
-            icon: Icons.wifi_off,
-            text: 'Could not load this stop.\n$err',
+          loading: () => const SkeletonList(count: 6),
+          error: (err, _) => StatusView.fromError(
+            err,
+            message: 'Could not load this stop.',
             onRetry: () => ref.invalidate(placeDetailsProvider(placeId!)),
           ),
         ),
@@ -143,10 +148,10 @@ class _PlaceBody extends ConsumerWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             _Chip(icon: modeIcon(place.type), label: place.readableType),
-            if (distance != null) _Chip(icon: Icons.near_me, label: distance),
+            if (distance != null) _Chip(icon: AppIcons.nearMe, label: distance),
             if (place.lat != null && place.lon != null)
               ActionChip(
-                avatar: const Icon(Icons.map_outlined, size: 16),
+                avatar: const Icon(AppIcons.map, size: 16),
                 label: const Text('Open in maps'),
                 onPressed: () => _openMap(context),
               ),
@@ -187,7 +192,7 @@ class _PlaceBody extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.schedule_outlined, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+          Icon(AppIcons.time, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
           const SizedBox(width: RatrooTheme.space3),
           Expanded(
             child: Text(
@@ -224,13 +229,13 @@ class _PlaceBody extends ConsumerWidget {
         if (place.sourceUrl != null)
           TextButton.icon(
             onPressed: () => _openSite(context, place.sourceUrl!),
-            icon: const Icon(Icons.open_in_new, size: 16),
+            icon: const Icon(AppIcons.externalLink, size: 16),
             label: Text('${place.canonicalName} timetable on WBBUS'),
           )
         else
           ...withSite.map((s) => TextButton.icon(
                 onPressed: () => _openSite(context, s.website!),
-                icon: const Icon(Icons.open_in_new, size: 16),
+                icon: const Icon(AppIcons.externalLink, size: 16),
                 label: Text('${s.name} website'),
               )),
       ],
@@ -287,7 +292,7 @@ class _DepartureTile extends StatelessWidget {
             ? Text(away <= 0 ? 'now' : 'in $away min',
                 style: theme.textTheme.labelMedium
                     ?.copyWith(color: RatrooTheme.confidenceHighText, fontWeight: FontWeight.w600))
-            : const Icon(Icons.chevron_right, size: 20),
+            : const Icon(AppIcons.chevron, size: 20),
       ),
     );
   }
@@ -331,7 +336,7 @@ class _RouteTile extends StatelessWidget {
         leading: Icon(modeIcon(category)),
         title: Text(route.name, maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: route.providerCode.isEmpty ? null : Text(route.providerCode),
-        trailing: const Icon(Icons.chevron_right, size: 20),
+        trailing: const Icon(AppIcons.chevron, size: 20),
         onTap: () => context.push('/route-details?id=${route.id}'),
       ),
     );
@@ -354,27 +359,3 @@ class _Chip extends StatelessWidget {
   }
 }
 
-class _Message extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final VoidCallback? onRetry;
-
-  const _Message({required this.icon, required this.text, this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(RatrooTheme.space8),
-      children: [
-        const SizedBox(height: RatrooTheme.space8),
-        Icon(icon, size: 56, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
-        const SizedBox(height: RatrooTheme.space4),
-        Text(text, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyLarge),
-        if (onRetry != null) ...[
-          const SizedBox(height: RatrooTheme.space4),
-          Center(child: FilledButton(onPressed: onRetry, child: const Text('Try again'))),
-        ],
-      ],
-    );
-  }
-}

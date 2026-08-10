@@ -8,7 +8,6 @@ import '../services/transit_service.dart';
 import '../services/journey_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/nearby_service.dart';
-import '../services/analytics_service.dart';
 import '../services/favorites_service.dart';
 
 /// Wall clock, injectable so time-of-day logic (which departure is "next")
@@ -117,11 +116,6 @@ final nearbyServiceProvider = Provider<NearbyService>((ref) {
   return NearbyService(client);
 });
 
-// Analytics Service Provider
-final analyticsServiceProvider = Provider<AnalyticsService>((ref) {
-  final client = ref.watch(apiClientProvider);
-  return AnalyticsService(client);
-});
 
 // Favorites Service Provider
 final favoritesServiceProvider = Provider<FavoritesService>((ref) {

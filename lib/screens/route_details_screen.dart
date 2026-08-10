@@ -10,6 +10,9 @@ import '../providers/api_providers.dart';
 import '../models/route.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
+import '../core/app_icons.dart';
+import '../widgets/status_view.dart';
+import '../widgets/skeleton.dart';
 
 final routeDetailsProvider =
     FutureProvider.autoDispose.family<ApiResponse<RouteModel>, String>((ref, routeId) async {
@@ -32,7 +35,11 @@ class RouteDetailsScreen extends ConsumerWidget {
     if (routeId == null || routeId!.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Route')),
-        body: const _Message(icon: Icons.wrong_location_outlined, text: 'No route was selected.'),
+        body: const StatusView(
+          kind: StatusKind.noLocation,
+          message: 'No route was selected.',
+          detail: 'Pick a route from a stop or from search.',
+        ),
       );
     }
 
@@ -44,17 +51,18 @@ class RouteDetailsScreen extends ConsumerWidget {
         data: (response) {
           final route = response.data;
           if (route == null) {
-            return _Message(
-              icon: Icons.search_off,
-              text: response.error ?? 'We have no details for this route.',
+            return StatusView(
+              kind: StatusKind.empty,
+              message: 'We have no details for this route.',
+              detail: response.error,
             );
           }
           return _RouteBody(route: route);
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => _Message(
-          icon: Icons.wifi_off,
-          text: 'Could not load this route.\n$err',
+        loading: () => const SkeletonList(count: 6),
+        error: (err, _) => StatusView.fromError(
+          err,
+          message: 'Could not load this route.',
           onRetry: () => ref.invalidate(routeDetailsProvider(routeId!)),
         ),
       ),
@@ -95,7 +103,7 @@ class _RouteBody extends ConsumerWidget {
                   // WBBUS and BUSSATHI record one, so most routes show none.
                   if (route.busLabel != null)
                     Chip(
-                      avatar: const Icon(Icons.directions_bus_filled, size: 16),
+                      avatar: const Icon(AppIcons.bus, size: 16),
                       label: Text(route.busLabel!),
                       backgroundColor: RatrooTheme.accentColor.withValues(alpha: 0.12),
                       labelStyle: theme.textTheme.labelMedium
@@ -103,13 +111,13 @@ class _RouteBody extends ConsumerWidget {
                       visualDensity: VisualDensity.compact,
                     ),
                   Chip(
-                    avatar: const Icon(Icons.business, size: 16),
+                    avatar: const Icon(AppIcons.operator_, size: 16),
                     label: Text(route.providerCode),
                     visualDensity: VisualDensity.compact,
                   ),
                   if (route.stops.isNotEmpty)
                     Chip(
-                      avatar: const Icon(Icons.pin_drop_outlined, size: 16),
+                      avatar: const Icon(AppIcons.place, size: 16),
                       label: Text('${route.stops.length} stops'),
                       visualDensity: VisualDensity.compact,
                     ),
@@ -157,7 +165,7 @@ class _RouteBody extends ConsumerWidget {
               if (route.bestSourceUrl != null)
                 TextButton.icon(
                   onPressed: () => _openSite(context, route.bestSourceUrl!),
-                  icon: const Icon(Icons.open_in_new, size: 16),
+                  icon: const Icon(AppIcons.externalLink, size: 16),
                   // Names what will open. The deep link lands on this route's
                   // own timetable; the fallback is the operator's front page,
                   // where the user would have to search for it again.
@@ -395,27 +403,3 @@ class _Rail extends StatelessWidget {
   }
 }
 
-class _Message extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final VoidCallback? onRetry;
-
-  const _Message({required this.icon, required this.text, this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(RatrooTheme.space8),
-      children: [
-        const SizedBox(height: RatrooTheme.space8),
-        Icon(icon, size: 56, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
-        const SizedBox(height: RatrooTheme.space4),
-        Text(text, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyLarge),
-        if (onRetry != null) ...[
-          const SizedBox(height: RatrooTheme.space4),
-          Center(child: FilledButton(onPressed: onRetry, child: const Text('Try again'))),
-        ],
-      ],
-    );
-  }
-}

@@ -5,11 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../providers/api_providers.dart';
 import '../models/journey.dart';
 import '../widgets/journey_card.dart';
+import '../widgets/skeleton.dart';
 import '../core/transit_icons.dart';
 import '../models/place.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
+import '../core/app_icons.dart';
+import '../widgets/status_view.dart';
 
 // State providers for search input and focus
 final fromSearchQueryProvider = StateProvider<String>((ref) => '');
@@ -150,7 +153,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
       appBar: AppBar(
         title: const Text('Journey Planner'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(AppIcons.back),
           onPressed: () => context.pop(),
         ),
       ),
@@ -166,7 +169,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   // From Field
                   Row(
                     children: [
-                      Icon(Icons.my_location, color: theme.colorScheme.primary, size: 20),
+                      Icon(AppIcons.myLocation, color: theme.colorScheme.primary, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(
@@ -187,7 +190,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                       ),
                       if (_fromController.text.isNotEmpty)
                         IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
+                          icon: const Icon(AppIcons.clear, size: 18),
                           onPressed: () {
                             _fromController.clear();
                             ref.read(fromSearchQueryProvider.notifier).state = '';
@@ -200,7 +203,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   // To Field
                   Row(
                     children: [
-                      const Icon(Icons.location_on, color: RatrooTheme.confidenceLowFill, size: 20),
+                      const Icon(AppIcons.place, color: RatrooTheme.confidenceLowFill, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(
@@ -221,7 +224,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                       ),
                       if (_toController.text.isNotEmpty)
                         IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
+                          icon: const Icon(AppIcons.clear, size: 18),
                           onPressed: () {
                             _toController.clear();
                             ref.read(toSearchQueryProvider.notifier).state = '';
@@ -256,8 +259,8 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                       }
                       return _buildPlansList(plans, response.metadata?.confidenceScore ?? 1.0);
                     },
-                    loading: () => _buildShimmerLoading(),
-                    error: (err, stack) => _buildErrorState(err.toString()),
+                    loading: () => const SkeletonList(count: 3),
+                    error: (err, _) => _buildErrorState(err),
                   ),
             ),
           ],
@@ -290,7 +293,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.my_location, size: 18, color: RatrooTheme.primaryColor),
+                    const Icon(AppIcons.myLocation, size: 18, color: RatrooTheme.primaryColor),
                     const SizedBox(width: RatrooTheme.space2),
                     Expanded(
                       child: Text(
@@ -327,7 +330,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                             for (final destination in destinations.take(16))
                               ActionChip(
                                 label: Text(destination),
-                                avatar: const Icon(Icons.arrow_forward, size: 15),
+                                avatar: const Icon(AppIcons.forward, size: 15),
                                 onPressed: () => _planTo(destination),
                               ),
                           ],
@@ -456,80 +459,22 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
 
 
 
-  Widget _buildShimmerLoading() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 3,
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: GlassContainer(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(height: 24, width: 100, color: Colors.grey.withValues(alpha: 0.1)),
-                    Container(height: 24, width: 60, color: Colors.grey.withValues(alpha: 0.1)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Container(height: 30, width: double.infinity, color: Colors.grey.withValues(alpha: 0.1)),
-                const SizedBox(height: 20),
-                Container(height: 20, width: 150, color: Colors.grey.withValues(alpha: 0.1)),
-              ],
-            ),
-          ),
-        ).animate(onPlay: (controller) => controller.repeat())
-         .shimmer(duration: 1200.ms, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05));
-      },
-    );
-  }
 
   Widget _buildEmptyState(String? error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.directions_off_outlined, size: 64, color: Colors.grey.withValues(alpha: 0.5)),
-            const SizedBox(height: 16),
-            Text(
-              error ?? 'No connecting routes found between these locations.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
+    return StatusView(
+      kind: StatusKind.noRoute,
+      message: 'No connecting routes found.',
+      // The planner's own explanation when it has one — "no service after
+      // 21:40" is worth more to a rider than a generic shrug.
+      detail: error ?? 'Try a nearby stop, or a different time of day.',
     );
   }
 
-  Widget _buildErrorState(String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
-            const SizedBox(height: 16),
-            Text(
-              'Trip Planning Error:\n$error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => ref.invalidate(journeyResultsProvider),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
+  Widget _buildErrorState(Object error) {
+    return StatusView.fromError(
+      error,
+      message: 'Could not plan this trip.',
+      onRetry: () => ref.invalidate(journeyResultsProvider),
     );
   }
 }

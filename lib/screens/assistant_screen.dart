@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme.dart';
 import '../providers/api_providers.dart';
+import '../widgets/linkified_text.dart';
+import '../core/app_icons.dart';
 
 class _Message {
   final String text;
@@ -113,7 +115,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
       padding: const EdgeInsets.all(RatrooTheme.space6),
       children: [
         const SizedBox(height: RatrooTheme.space8),
-        Icon(Icons.auto_awesome, size: 48, color: theme.colorScheme.primary),
+        Icon(AppIcons.assistant, size: 48, color: theme.colorScheme.primary),
         const SizedBox(height: RatrooTheme.space4),
         Text('Ask about any journey', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
         const SizedBox(height: RatrooTheme.space2),
@@ -154,7 +156,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SelectableText(
+            // The assistant's replies carry a link per service; a plain Text
+            // left them as dead characters.
+            LinkifiedText(
               message.text,
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: isUser ? Colors.white : theme.colorScheme.onSurface,
@@ -165,7 +169,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
               const SizedBox(height: RatrooTheme.space2),
               Row(
                 children: [
-                  const Icon(Icons.verified, size: 13, color: RatrooTheme.confidenceHighText),
+                  const Icon(AppIcons.verified, size: 13, color: RatrooTheme.confidenceHighText),
                   const SizedBox(width: 4),
                   Text(
                     'From live route data',
@@ -225,7 +229,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
           const SizedBox(width: RatrooTheme.space2),
           IconButton.filled(
             onPressed: _busy ? null : () => _send(),
-            icon: const Icon(Icons.arrow_upward),
+            icon: const Icon(AppIcons.up),
             tooltip: 'Ask',
           ),
         ],

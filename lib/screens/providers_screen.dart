@@ -8,6 +8,8 @@ import '../core/theme.dart';
 import '../core/transit_icons.dart';
 import '../models/provider.dart';
 import '../providers/api_providers.dart';
+import '../widgets/skeleton.dart';
+import '../core/app_icons.dart';
 
 final providersProvider =
     FutureProvider.autoDispose<ApiResponse<List<TransitProvider>>>((ref) async {
@@ -44,7 +46,7 @@ class ProvidersScreen extends ConsumerWidget {
                 itemBuilder: (context, index) => _ProviderTile(provider: providers[index]),
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const SkeletonList(count: 6),
             error: (err, _) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(RatrooTheme.space6),
@@ -80,7 +82,7 @@ class _ProviderTile extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing: const Icon(Icons.chevron_right, size: 20),
+        trailing: const Icon(AppIcons.chevron, size: 20),
         onTap: () => context.push('/provider?code=${provider.code}'),
       ),
     );
@@ -174,7 +176,7 @@ class ProviderDetailScreen extends ConsumerWidget {
         if (provider.website != null)
           FilledButton.icon(
             onPressed: () => _open(context, provider.website!),
-            icon: const Icon(Icons.open_in_new, size: 18),
+            icon: const Icon(AppIcons.externalLink, size: 18),
             label: Text('Open ${provider.code} website'),
           )
         else

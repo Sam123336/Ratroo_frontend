@@ -120,12 +120,55 @@ def build_modes(pairs: list[str]) -> None:
         print(f'  {target.name}: {MODE_SIZE}x{MODE_SIZE} ({target.stat().st_size // 1024} KB)')
 
 
+BANNER = (960, 420)
+
+
+def build_banners(pairs: list[str]) -> None:
+    """Wide hero crops for the mode screens.
+
+        python3 tool/build_brand_assets.py banners bus=~/Bus.png
+
+    The circular 256px thumbnails are far too small to stretch across a header.
+    These are centre-cropped to 32:14 and kept small enough to bundle: a hero
+    that arrives after the text has laid out causes a visible jump.
+    """
+    OUT.mkdir(parents=True, exist_ok=True)
+
+    for pair in pairs:
+        mode, _, source = pair.partition('=')
+        if not source:
+            raise SystemExit(f'Expected mode=path, got {pair!r}')
+
+        photo = Image.open(Path(source).expanduser()).convert('RGB')
+        target = BANNER[0] / BANNER[1]
+        width, height = photo.size
+
+        # Crop to the banner aspect from the middle, then scale once.
+        if width / height > target:
+            crop_width = round(height * target)
+            left = (width - crop_width) // 2
+            box = (left, 0, left + crop_width, height)
+        else:
+            crop_height = round(width / target)
+            top = (height - crop_height) // 2
+            box = (0, top, width, top + crop_height)
+
+        banner = photo.crop(box).resize(BANNER, Image.LANCZOS)
+        path = OUT / f'hero_{mode}.jpg'
+        banner.save(path, 'JPEG', quality=82, optimize=True)
+        print(f'  {path.name}: {BANNER[0]}x{BANNER[1]} ({path.stat().st_size // 1024} KB)')
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
 
     if sys.argv[1] == 'modes':
         build_modes(sys.argv[2:])
+        return
+
+    if sys.argv[1] == 'banners':
+        build_banners(sys.argv[2:])
         return
 
     master = Image.open(Path(sys.argv[1]).expanduser())

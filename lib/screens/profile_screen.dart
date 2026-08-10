@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../core/theme.dart';
 import '../providers/api_providers.dart';
 import '../services/auth_service.dart';
+import '../core/app_icons.dart';
 
 /// Signed out: a prompt to sign in. Signed in: who you are, and a way out.
 class ProfileScreen extends ConsumerWidget {
@@ -39,7 +40,7 @@ class _SignedOut extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.person_outline, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+            Icon(AppIcons.user, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
             const SizedBox(height: RatrooTheme.space4),
             Text('You are not signed in', style: theme.textTheme.titleLarge),
             const SizedBox(height: RatrooTheme.space2),
@@ -117,7 +118,7 @@ class _SignedInState extends ConsumerState<_SignedIn> {
           child: Column(
             children: [
               ListTile(
-                leading: const Icon(Icons.logout, color: RatrooTheme.confidenceLowText),
+                leading: const Icon(AppIcons.signOut, color: RatrooTheme.confidenceLowText),
                 title: Text(
                   'Sign out',
                   style: theme.textTheme.titleSmall?.copyWith(color: RatrooTheme.confidenceLowText),

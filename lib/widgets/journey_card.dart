@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/theme.dart';
 import '../models/journey.dart';
+import '../core/app_icons.dart';
 
 /// One journey option: a summary strip, then a leg-by-leg timeline.
 ///
@@ -111,12 +112,12 @@ class _LegRow extends StatelessWidget {
   const _LegRow({required this.leg, required this.isLast});
 
   static const _icons = {
-    'bus': Icons.directions_bus,
-    'rail': Icons.train,
-    'metro': Icons.subway,
-    'ferry': Icons.directions_boat,
-    'tram': Icons.tram,
-    'walk': Icons.directions_walk,
+    'bus': AppIcons.bus,
+    'rail': AppIcons.rail,
+    'metro': AppIcons.metro,
+    'ferry': AppIcons.ferry,
+    'tram': AppIcons.tram,
+    'walk': AppIcons.walk,
   };
 
   @override
@@ -139,7 +140,7 @@ class _LegRow extends StatelessWidget {
                     color: colour.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(_icons[leg.modeKey] ?? Icons.directions_bus,
+                  child: Icon(_icons[leg.modeKey] ?? AppIcons.bus,
                       size: 17, color: colour),
                 ),
                 if (!isLast)

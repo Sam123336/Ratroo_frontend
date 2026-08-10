@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/theme.dart';
 import '../providers/api_providers.dart';
+import '../core/app_icons.dart';
 
 /// One screen for both sign-in and sign-up — the fields are nearly identical,
 /// and a toggle beats two near-duplicate screens.
@@ -127,7 +128,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     decoration: InputDecoration(
                       hintText: 'Password',
                       suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                        icon: Icon(_obscurePassword ? AppIcons.hidePassword : AppIcons.showPassword),
                         onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                         tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                       ),
@@ -153,7 +154,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: RatrooTheme.confidenceLowText, size: 20),
+                    const Icon(AppIcons.error, color: RatrooTheme.confidenceLowText, size: 20),
                     const SizedBox(width: RatrooTheme.space2),
                     Expanded(
                       child: Text(

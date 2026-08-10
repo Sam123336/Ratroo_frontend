@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_icons.dart';
 
 /// Icon for a stop category, as `/v1/stops/nearby` and `/v1/places/:id` report
 /// it: `<routeType>_STOP` — BUS_STOP, RAIL_STOP, FERRY_STOP, TRAM_STOP.
@@ -68,19 +69,19 @@ IconData modeIcon(String? category) {
   switch (category) {
     case 'RAIL_STOP':
     case 'RAIL_STATION':
-      return Icons.train;
+      return AppIcons.rail;
     case 'FERRY_STOP':
     case 'FERRY_GHAT':
-      return Icons.directions_boat;
+      return AppIcons.ferry;
     case 'TRAM_STOP':
-      return Icons.tram;
+      return AppIcons.tram;
     case 'METRO_STOP':
     case 'METRO_STATION':
-      return Icons.subway;
+      return AppIcons.metro;
     case 'BUS_STOP':
-      return Icons.directions_bus;
+      return AppIcons.bus;
     default:
       // Generic "STOP", or a category we do not know: claim nothing.
-      return Icons.place_outlined;
+      return AppIcons.place;
   }
 }
