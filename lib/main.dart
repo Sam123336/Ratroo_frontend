@@ -16,7 +16,8 @@ class RatrooApp extends ConsumerStatefulWidget {
   ConsumerState<RatrooApp> createState() => _RatrooAppState();
 }
 
-class _RatrooAppState extends ConsumerState<RatrooApp> with WidgetsBindingObserver {
+class _RatrooAppState extends ConsumerState<RatrooApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -42,7 +43,7 @@ class _RatrooAppState extends ConsumerState<RatrooApp> with WidgetsBindingObserv
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      checkLocationDrift(ref);
+      checkLocationDrift(ref, mounted: () => mounted);
     }
   }
 

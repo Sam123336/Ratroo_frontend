@@ -19,14 +19,17 @@ final fromSearchQueryProvider = StateProvider<String>((ref) => '');
 final toSearchQueryProvider = StateProvider<String>((ref) => '');
 final selectedFromPlaceProvider = StateProvider<Place?>((ref) => null);
 final selectedToPlaceProvider = StateProvider<Place?>((ref) => null);
-final activeSearchFieldProvider = StateProvider<String?>((ref) => null); // 'from', 'to', or null
+final activeSearchFieldProvider = StateProvider<String?>(
+  (ref) => null,
+); // 'from', 'to', or null
 
 // FutureProvider for search suggestions
-final searchSuggestionsProvider = FutureProvider.autoDispose.family<ApiResponse<List<Place>>, String>((ref, query) async {
-  if (query.trim().isEmpty) return ApiResponse(success: true, data: []);
-  final searchService = ref.watch(searchServiceProvider);
-  return await searchService.searchPlaces(query);
-});
+final searchSuggestionsProvider = FutureProvider.autoDispose
+    .family<ApiResponse<List<Place>>, String>((ref, query) async {
+      if (query.trim().isEmpty) return ApiResponse(success: true, data: []);
+      final searchService = ref.watch(searchServiceProvider);
+      return await searchService.searchPlaces(query);
+    });
 
 /// The stop the user is standing closest to, widening the search until it
 /// finds one. Used to fill "From" so nobody has to type where they already are.
@@ -46,50 +49,59 @@ final nearestStopProvider = FutureProvider.autoDispose<Place?>((ref) async {
 /// Taken from the destinations of the services that call there — the headsign
 /// of each departure, then the far end of each route. Nothing is inferred:
 /// every name here is the end of a real service from this stop.
-final reachableFromProvider =
-    FutureProvider.autoDispose.family<List<String>, String>((ref, stopId) async {
-  final response = await ref.watch(searchServiceProvider).getPlaceById(stopId);
-  final place = response.data;
-  if (place == null) return const [];
+final reachableFromProvider = FutureProvider.autoDispose
+    .family<List<String>, String>((ref, stopId) async {
+      final response = await ref
+          .watch(searchServiceProvider)
+          .getPlaceById(stopId);
+      final place = response.data;
+      if (place == null) return const [];
 
-  final seen = <String>{};
-  final destinations = <String>[];
+      final seen = <String>{};
+      final destinations = <String>[];
 
-  void add(String? name) {
-    final value = name?.trim();
-    if (value == null || value.isEmpty) return;
-    // Where you already are is not somewhere to go.
-    if (value.toLowerCase() == place.canonicalName.toLowerCase()) return;
-    if (seen.add(value.toLowerCase())) destinations.add(value);
-  }
+      void add(String? name) {
+        final value = name?.trim();
+        if (value == null || value.isEmpty) return;
+        // Where you already are is not somewhere to go.
+        if (value.toLowerCase() == place.canonicalName.toLowerCase()) return;
+        if (seen.add(value.toLowerCase())) destinations.add(value);
+      }
 
-  for (final departure in place.departures) {
-    add(departure.headsign);
-  }
-  for (final route in place.routes) {
-    add(route.shortLabelAt(place.canonicalName));
-  }
+      for (final departure in place.departures) {
+        add(departure.headsign);
+      }
+      for (final route in place.routes) {
+        add(route.shortLabelAt(place.canonicalName));
+      }
 
-  return destinations;
-});
+      return destinations;
+    });
 
 // FutureProvider for final journey plans
-final journeyResultsProvider = FutureProvider.autoDispose<ApiResponse<List<JourneyPlanModel>>>((ref) async {
-  final fromPlace = ref.watch(selectedFromPlaceProvider);
-  final toPlace = ref.watch(selectedToPlaceProvider);
-  if (fromPlace == null || toPlace == null) {
-    return ApiResponse(success: true, data: []);
-  }
-  final journeyService = ref.watch(journeyServiceProvider);
-  // The API planner expects place names (titles) rather than place UUIDs in the database
-  return await journeyService.getJourneyPlan(fromPlace.canonicalName, toPlace.canonicalName);
-});
+final journeyResultsProvider =
+    FutureProvider.autoDispose<ApiResponse<List<JourneyPlanModel>>>((
+      ref,
+    ) async {
+      final fromPlace = ref.watch(selectedFromPlaceProvider);
+      final toPlace = ref.watch(selectedToPlaceProvider);
+      if (fromPlace == null || toPlace == null) {
+        return ApiResponse(success: true, data: []);
+      }
+      final journeyService = ref.watch(journeyServiceProvider);
+      // The API planner expects place names (titles) rather than place UUIDs in the database
+      return await journeyService.getJourneyPlan(
+        fromPlace.canonicalName,
+        toPlace.canonicalName,
+      );
+    });
 
 class JourneyPlannerScreen extends ConsumerStatefulWidget {
   const JourneyPlannerScreen({super.key});
 
   @override
-  ConsumerState<JourneyPlannerScreen> createState() => _JourneyPlannerScreenState();
+  ConsumerState<JourneyPlannerScreen> createState() =>
+      _JourneyPlannerScreenState();
 }
 
 class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
@@ -143,7 +155,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
     final activeField = ref.watch(activeSearchFieldProvider);
     final fromQuery = ref.watch(fromSearchQueryProvider);
     final toQuery = ref.watch(toSearchQueryProvider);
-    
+
     final selectedFrom = ref.watch(selectedFromPlaceProvider);
     final selectedTo = ref.watch(selectedToPlaceProvider);
 
@@ -161,7 +173,10 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
         children: [
           // Search input box
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
             child: GlassContainer(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -169,16 +184,24 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   // From Field
                   Row(
                     children: [
-                      Icon(AppIcons.myLocation, color: theme.colorScheme.primary, size: 20),
+                      Icon(
+                        AppIcons.myLocation,
+                        color: theme.colorScheme.primary,
+                        size: 20,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(
                           controller: _fromController,
                           focusNode: _fromFocus,
                           onChanged: (val) {
-                            ref.read(fromSearchQueryProvider.notifier).state = val;
+                            ref.read(fromSearchQueryProvider.notifier).state =
+                                val;
                             if (ref.read(selectedFromPlaceProvider) != null) {
-                              ref.read(selectedFromPlaceProvider.notifier).state = null;
+                              ref
+                                      .read(selectedFromPlaceProvider.notifier)
+                                      .state =
+                                  null;
                             }
                           },
                           decoration: const InputDecoration(
@@ -193,8 +216,10 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                           icon: const Icon(AppIcons.clear, size: 18),
                           onPressed: () {
                             _fromController.clear();
-                            ref.read(fromSearchQueryProvider.notifier).state = '';
-                            ref.read(selectedFromPlaceProvider.notifier).state = null;
+                            ref.read(fromSearchQueryProvider.notifier).state =
+                                '';
+                            ref.read(selectedFromPlaceProvider.notifier).state =
+                                null;
                           },
                         ),
                     ],
@@ -203,16 +228,22 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   // To Field
                   Row(
                     children: [
-                      const Icon(AppIcons.place, color: RatrooTheme.confidenceLowFill, size: 20),
+                      const Icon(
+                        AppIcons.place,
+                        color: RatrooTheme.confidenceLowFill,
+                        size: 20,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(
                           controller: _toController,
                           focusNode: _toFocus,
                           onChanged: (val) {
-                            ref.read(toSearchQueryProvider.notifier).state = val;
+                            ref.read(toSearchQueryProvider.notifier).state =
+                                val;
                             if (ref.read(selectedToPlaceProvider) != null) {
-                              ref.read(selectedToPlaceProvider.notifier).state = null;
+                              ref.read(selectedToPlaceProvider.notifier).state =
+                                  null;
                             }
                           },
                           decoration: const InputDecoration(
@@ -228,7 +259,8 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                           onPressed: () {
                             _toController.clear();
                             ref.read(toSearchQueryProvider.notifier).state = '';
-                            ref.read(selectedToPlaceProvider.notifier).state = null;
+                            ref.read(selectedToPlaceProvider.notifier).state =
+                                null;
                           },
                         ),
                     ],
@@ -251,20 +283,25 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
           if (showJourneyResults) ...[
             _buildFilters(),
             Expanded(
-              child: ref.watch(journeyResultsProvider).when(
+              child: ref
+                  .watch(journeyResultsProvider)
+                  .when(
                     data: (response) {
                       final plans = response.data ?? [];
                       if (plans.isEmpty) {
                         return _buildEmptyState(response.error);
                       }
-                      return _buildPlansList(plans, response.metadata?.confidenceScore ?? 1.0);
+                      return _buildPlansList(
+                        plans,
+                        response.metadata?.confidenceScore ?? 1.0,
+                      );
                     },
                     loading: () => const SkeletonList(count: 3),
                     error: (err, _) => _buildErrorState(err),
                   ),
             ),
           ],
-          
+
           // Was a line of grey text telling the user to type. It now offers
           // the nearest stop and the places you can actually reach from it.
           if (activeField == null && !showJourneyResults)
@@ -278,7 +315,9 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
   Widget _buildStartSuggestions() {
     final theme = Theme.of(context);
 
-    return ref.watch(nearestStopProvider).when(
+    return ref
+        .watch(nearestStopProvider)
+        .when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, _) => _startHint(theme),
           data: (stop) {
@@ -286,14 +325,20 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
 
             // Fill "From" as soon as we know where they are. Deferred to after
             // the frame: setting a controller during build throws.
-            WidgetsBinding.instance.addPostFrameCallback((_) => _prefillFrom(stop));
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _prefillFrom(stop),
+            );
 
             return ListView(
               padding: const EdgeInsets.all(RatrooTheme.space4),
               children: [
                 Row(
                   children: [
-                    const Icon(AppIcons.myLocation, size: 18, color: RatrooTheme.primaryColor),
+                    const Icon(
+                      AppIcons.myLocation,
+                      size: 18,
+                      color: RatrooTheme.primaryColor,
+                    ),
                     const SizedBox(width: RatrooTheme.space2),
                     Expanded(
                       child: Text(
@@ -305,69 +350,121 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   ],
                 ),
                 const SizedBox(height: RatrooTheme.space4),
-                Text('Where can you go from here', style: theme.textTheme.titleMedium),
-                const SizedBox(height: RatrooTheme.space3),
-                ref.watch(reachableFromProvider(stop.id)).when(
-                      loading: () => const Padding(
-                        padding: EdgeInsets.symmetric(vertical: RatrooTheme.space4),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      error: (_, _) => Text('Could not load destinations.',
-                          style: theme.textTheme.bodyMedium),
-                      data: (destinations) {
-                        if (destinations.isEmpty) {
-                          return Text(
-                            'No services from ${stop.canonicalName} are mapped yet, '
-                            'so type a destination instead.',
-                            style: theme.textTheme.bodyMedium,
-                          );
-                        }
-
-                        return Wrap(
-                          spacing: RatrooTheme.space2,
-                          runSpacing: RatrooTheme.space2,
-                          children: [
-                            for (final destination in destinations.take(16))
-                              ActionChip(
-                                label: Text(destination),
-                                avatar: const Icon(AppIcons.forward, size: 15),
-                                onPressed: () => _planTo(destination),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
+                _reachableSection(stop, theme),
               ],
             );
           },
         );
   }
 
+  /// Where a rider can actually get to from [stop], in one ride.
+  ///
+  /// Shown in two places: before anything is chosen, against the nearest stop,
+  /// and again once an origin is set and the "To" field is empty — which is
+  /// where it was missing. Picking a departure and then being told to "type to
+  /// search" wastes the one thing the app just learned.
+  Widget _reachableSection(Place stop, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Where you can go from ${stop.canonicalName}',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: RatrooTheme.space1),
+        Text(
+          // Named for what it is: these are one-seat rides, not the full set
+          // of places reachable with a change.
+          'Direct services from this stop.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: RatrooTheme.space3),
+        ref
+            .watch(reachableFromProvider(stop.id))
+            .when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: RatrooTheme.space4),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (_, _) => Text(
+                'Could not load destinations.',
+                style: theme.textTheme.bodyMedium,
+              ),
+              data: (destinations) {
+                if (destinations.isEmpty) {
+                  return Text(
+                    'No services from ${stop.canonicalName} are mapped yet, '
+                    'so type a destination instead.',
+                    style: theme.textTheme.bodyMedium,
+                  );
+                }
+
+                return Wrap(
+                  spacing: RatrooTheme.space2,
+                  runSpacing: RatrooTheme.space2,
+                  children: [
+                    for (final destination in destinations.take(16))
+                      ActionChip(
+                        label: Text(destination),
+                        avatar: const Icon(AppIcons.forward, size: 15),
+                        onPressed: () => _planTo(destination),
+                      ),
+                  ],
+                );
+              },
+            ),
+      ],
+    );
+  }
+
   /// Fills "To" with a suggested destination and plans straight away — the
   /// point of a suggestion is not having to type it.
   void _planTo(String destination) {
     _toController.text = destination;
-    ref.read(selectedToPlaceProvider.notifier).state =
-        Place(id: '', canonicalName: destination);
+    ref.read(selectedToPlaceProvider.notifier).state = Place(
+      id: '',
+      canonicalName: destination,
+    );
     ref.read(activeSearchFieldProvider.notifier).state = null;
     _toFocus.unfocus();
     setState(() {});
   }
 
   Widget _startHint(ThemeData theme) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(RatrooTheme.space6),
+      child: Text(
+        'Enter a departure and destination to plan your trip.',
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodyMedium,
+      ),
+    ),
+  );
+
+  Widget _buildSuggestionsList(String query, String field) {
+    if (query.trim().isEmpty) {
+      final theme = Theme.of(context);
+      final origin = ref.watch(selectedFromPlaceProvider);
+
+      // An origin with an id is one we can ask about. A destination typed in
+      // by hand has no id, and neither does the "From" field before a stop is
+      // actually picked from the list.
+      if (field == 'to' && origin != null && origin.id.isNotEmpty) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(RatrooTheme.space4),
+          child: _reachableSection(origin, theme),
+        );
+      }
+
+      return Center(
         child: Padding(
           padding: const EdgeInsets.all(RatrooTheme.space6),
           child: Text(
-            'Enter a departure and destination to plan your trip.',
-            textAlign: TextAlign.center,
+            'Type to search stops or cities.',
             style: theme.textTheme.bodyMedium,
           ),
         ),
       );
-
-  Widget _buildSuggestionsList(String query, String field) {
-    if (query.trim().isEmpty) {
-      return const Center(child: Text('Type to search stops or cities...'));
     }
 
     final suggestionsAsync = ref.watch(searchSuggestionsProvider(query));
@@ -386,7 +483,9 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
             return ListTile(
               leading: Icon(
                 modeIcon(place.type),
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.7),
               ),
               title: Text(place.canonicalName),
               subtitle: Text(place.readableType),
@@ -425,7 +524,9 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
           return ChoiceChip(
             label: Text(filter),
             selected: isSelected,
-            selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+            selectedColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.2),
             onSelected: (selected) {
               if (selected) {
                 setState(() {
@@ -447,18 +548,13 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
       padding: const EdgeInsets.all(RatrooTheme.space4),
       itemCount: plans.length,
       itemBuilder: (context, index) {
-        return JourneyCard(plan: plans[index], isBest: index == 0)
-            .animate()
-            .fadeIn(delay: (index * 90).ms)
-            .slideY(begin: 0.08, end: 0);
+        return JourneyCard(
+          plan: plans[index],
+          isBest: index == 0,
+        ).animate().fadeIn(delay: (index * 90).ms).slideY(begin: 0.08, end: 0);
       },
     );
   }
-
-
-
-
-
 
   Widget _buildEmptyState(String? error) {
     return StatusView(

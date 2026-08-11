@@ -45,6 +45,7 @@ class AppIcons {
   static const add = PhosphorIconsRegular.plus;
   static const remove = PhosphorIconsRegular.minus;
   static const list = PhosphorIconsRegular.listBullets;
+  static const copy = PhosphorIconsRegular.copy;
   static const time = PhosphorIconsRegular.clock;
   static const operator_ = PhosphorIconsRegular.buildings;
   static const verified = PhosphorIconsRegular.sealCheck;

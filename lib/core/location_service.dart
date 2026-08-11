@@ -55,6 +55,17 @@ class LocationService {
   /// age we pay for a real one rather than trust it.
   static const staleFix = Duration(minutes: 5);
 
+  /// How long a *failed* attempt is reused.
+  ///
+  /// Failures used not to be cached at all, so every rebuild re-ran the whole
+  /// sequence and waited out the 12-second timeout again. Tapping Retry paid
+  /// that cost twice — once for the forced call, once for the provider
+  /// rebuilding behind it — which is why Retry looked dead for half a minute.
+  ///
+  /// Much shorter than [cacheFor]: a rider who turns location on wants the app
+  /// to notice without being told twice.
+  static const failureCacheFor = Duration(seconds: 30);
+
   /// Cached so repeated screen builds don't each trigger a GPS fix.
   UserLocation? _last;
   DateTime? _lastAt;
@@ -64,8 +75,16 @@ class LocationService {
   /// Never throws. A refused permission is an answer, not an error — the caller
   /// gets the fallback with a status explaining why.
   Future<UserLocation> current({bool forceRefresh = false}) async {
-    final fresh = _lastAt != null && DateTime.now().difference(_lastAt!) < cacheFor;
-    if (!forceRefresh && fresh && _last != null && _last!.isLive) return _last!;
+    final last = _last;
+    if (!forceRefresh &&
+        last != null &&
+        _lastAt != null &&
+        canReuse(
+          isLive: last.isLive,
+          age: DateTime.now().difference(_lastAt!),
+        )) {
+      return last;
+    }
 
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
@@ -138,6 +157,14 @@ class LocationService {
     return location;
   }
 }
+
+/// Whether a stored answer is still good enough to hand back.
+///
+/// A real fix is reused for [LocationService.cacheFor]; a failure only for
+/// [LocationService.failureCacheFor], so the app re-checks soon after a rider
+/// enables location without hammering the OS on every rebuild.
+bool canReuse({required bool isLive, required Duration age}) =>
+    age < (isLive ? LocationService.cacheFor : LocationService.failureCacheFor);
 
 /// Straight-line metres between two points. Not walking distance — we have no
 /// pedestrian network to route over, so treat it as a lower bound.

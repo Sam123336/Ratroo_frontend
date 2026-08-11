@@ -72,22 +72,26 @@ String distanceLabel(double metres) {
   return '${(metres / 1000).round()} km';
 }
 
-/// Collapses stop records that are the same physical place.
+/// Collapses stop records that are the same physical place into one row.
 ///
-/// The nearby list showed "KOLKATA", "Kolkata" and "Kolkata" as three rows —
-/// separate records from separate operator imports, identical to a rider and
+/// The nearby list showed "KOLKATA", "Kolkata" and "Kolkata" as three cards —
+/// separate operator imports of one bus stand, identical to a rider and
 /// impossible to choose between.
+///
+/// Merges rather than drops. Those three cards carried *different* services
+/// between them; keeping only the first would have hidden the rest, which is
+/// worse than the duplication it fixes. The nearest record supplies the
+/// identity and distance, and the others contribute their routes.
 ///
 /// Only merged when the names match *and* the two sit within [withinMetres] of
 /// each other. Two genuinely different stops that share a name — common, since
-/// operators name stops after the locality — stay separate, because collapsing
-/// those would hide services.
-List<Place> dedupeSamePlace(List<Place> places, {double withinMetres = 150}) {
+/// operators name stops after the locality — stay separate.
+List<Place> mergeSamePlace(List<Place> places, {double withinMetres = 150}) {
   final kept = <Place>[];
 
   for (final place in places) {
     final key = _nameKey(place.canonicalName);
-    final duplicate = kept.any((other) {
+    final index = kept.indexWhere((other) {
       if (_nameKey(other.canonicalName) != key) return false;
       final a = place.distanceMetres;
       final b = other.distanceMetres;
@@ -97,10 +101,42 @@ List<Place> dedupeSamePlace(List<Place> places, {double withinMetres = 150}) {
       return (a - b).abs() <= withinMetres;
     });
 
-    if (!duplicate) kept.add(place);
+    if (index < 0) {
+      kept.add(place);
+    } else {
+      kept[index] = _absorb(kept[index], place);
+    }
   }
 
   return kept;
+}
+
+/// [keep] wins on identity — the list arrives sorted by distance, so it is the
+/// nearest record and the one the card opens.
+Place _absorb(Place keep, Place extra) {
+  final routes = [...keep.routes];
+  final routeIds = routes.map((route) => route.id).toSet();
+  for (final route in extra.routes) {
+    if (routeIds.add(route.id)) routes.add(route);
+  }
+
+  final departures = [...keep.departures, ...extra.departures];
+
+  return Place(
+    id: keep.id,
+    canonicalName: keep.canonicalName,
+    type: keep.type ?? extra.type,
+    lat: keep.lat ?? extra.lat,
+    lon: keep.lon ?? extra.lon,
+    routes: routes,
+    departures: departures,
+    sources: [...keep.sources, ...extra.sources],
+    sourceUrl: keep.sourceUrl ?? extra.sourceUrl,
+    distanceMetres: keep.distanceMetres,
+    city: keep.city ?? extra.city,
+    district: keep.district ?? extra.district,
+    state: keep.state ?? extra.state,
+  );
 }
 
 String _nameKey(String name) =>

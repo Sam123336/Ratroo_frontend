@@ -31,7 +31,7 @@ final _nearbySuggestionsProvider = FutureProvider.autoDispose<List<Place>>((
       .watch(nearbyServiceProvider)
       .findNearest(location.latitude, location.longitude);
   // Three rows reading "Kolkata" are three separate imports of one stop.
-  return dedupeSamePlace(response.data?.places ?? const []);
+  return mergeSamePlace(response.data?.places ?? const []);
 });
 
 final _searchResultsProvider = FutureProvider.autoDispose

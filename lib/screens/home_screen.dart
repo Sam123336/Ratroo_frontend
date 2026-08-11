@@ -10,10 +10,12 @@ import '../models/place.dart';
 import '../services/nearby_service.dart';
 import '../models/route.dart';
 import '../core/format.dart';
+import '../services/saved_answers_service.dart';
 import '../core/theme.dart';
 import '../core/api_client.dart';
 import '../core/location_service.dart';
 import '../widgets/aurora_backdrop.dart';
+import '../widgets/bus_banner.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/tilt_tap.dart';
 import '../core/app_icons.dart';
@@ -198,6 +200,10 @@ class HomeScreen extends ConsumerWidget {
               await ref
                   .read(locationServiceProvider)
                   .current(forceRefresh: true);
+              // A forced fix can take twelve seconds. Leaving the screen in
+              // that window disposes this element, and `invalidate` then
+              // throws 'Cannot use "ref" after the widget was disposed'.
+              if (!context.mounted) return;
               ref.invalidate(userLocationProvider);
               ref.invalidate(homeNearbyStationsProvider);
               ref.invalidate(homeSavedRoutesProvider);
@@ -210,8 +216,6 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
                 _buildSearchBar(context),
                 const SizedBox(height: RatrooTheme.space6),
-                _buildQuickAccess(context),
-                const SizedBox(height: RatrooTheme.space8),
                 _buildNearbySection(context, ref),
                 const SizedBox(height: RatrooTheme.space8),
                 _buildNetworkSection(context, ref),
@@ -262,113 +266,93 @@ class HomeScreen extends ConsumerWidget {
     final drift = ref.watch(locationDriftProvider);
     // Null until sign-in, and null for a signed-in account with no name set.
     // Either way the greeting simply stops early rather than guessing.
-    final name = ref.watch(currentUserProvider).valueOrNull?.displayName;
+    final user = ref.watch(currentUserProvider).valueOrNull;
+    final name = user?.displayName;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // The greeting leads and the account sits opposite it — nobody opens a
+        // transit app to be told which app it is.
         Row(
           children: [
-            // The mark on transparency, so it sits on the page rather than in
-            // a white tile of its own.
-            Image.asset(
-              'assets/brand/ratroo_logo.png',
-              height: 28,
-              semanticLabel: 'Ratroo',
+            Expanded(
+              child: Text(
+                name == null
+                    ? greeting(DateTime.now())
+                    : '${greeting(DateTime.now())}, $name',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
-            const Spacer(),
-            Text(
-              name == null
-                  ? greeting(DateTime.now())
-                  : '${greeting(DateTime.now())}, $name',
-              style: theme.textTheme.bodyMedium,
-            ),
+            _AccountButton(name: name, email: user?.email),
           ],
         ).animate().fadeIn().slideY(begin: -0.2, end: 0),
-        const SizedBox(height: RatrooTheme.space6),
-        Text(
-          'Where would you\nlike to go today?',
-          style: GoogleFonts.outfit(
-            fontSize: 34,
-            height: 1.15,
-            fontWeight: FontWeight.bold,
-            letterSpacing: -0.5,
-            color: theme.colorScheme.onSurface,
-          ),
-        ).animate().fadeIn(delay: 60.ms).slideY(begin: -0.15, end: 0),
-        const SizedBox(height: RatrooTheme.space3),
-        Text(
-          // Was "Live bus, metro, rail and ferry across West Bengal" for
-          // everyone — wrong in Karnataka, and wrong about metro everywhere,
-          // since no metro routes are mapped at all.
-          _subtitle(ref),
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
-        ).animate().fadeIn(delay: 120.ms).slideY(begin: -0.15, end: 0),
-        if (area != null) ...[
-          const SizedBox(height: RatrooTheme.space4),
-          _LocationPill(area: area),
-        ],
+        const SizedBox(height: RatrooTheme.space4),
+        // The question sits on frosted glass over the moving scene rather than
+        // beside it. Dark text straight onto the animation would be illegible
+        // wherever the bus or a tree passed behind it; the panel guarantees
+        // contrast whatever frame is showing, and still lets the scene through.
+        // The panel is positioned from the top rather than pinned to the
+        // bottom. Bottom-aligned, it grew upwards with its own content and
+        // swallowed most of the banner — the bus was behind the glass instead
+        // of beside it. Starting it at a fixed offset means the overlap is a
+        // decision, not a side effect of how long the subtitle happens to be.
+        Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            const BusBanner(height: 190),
+            Padding(
+              padding: const EdgeInsets.only(top: 168),
+              child: GlassContainer(
+                blur: 18,
+                opacity: 0.82,
+                padding: const EdgeInsets.all(RatrooTheme.space6),
+                borderRadius: BorderRadius.circular(RatrooTheme.radiusXl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Where would you\nlike to go today?',
+                      style: GoogleFonts.outfit(
+                        fontSize: 30,
+                        height: 1.15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.5,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: RatrooTheme.space2),
+                    Text(
+                      // Was "Live bus, metro, rail and ferry across West Bengal"
+                      // for everyone — wrong in Karnataka, and wrong about metro
+                      // everywhere, since no metro routes are mapped at all.
+                      _subtitle(ref),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    ),
+                    if (area != null) ...[
+                      const SizedBox(height: RatrooTheme.space4),
+                      _LocationPill(area: area),
+                    ],
+                  ],
+                ),
+              ),
+            ).animate().fadeIn(delay: 80.ms).slideY(begin: 0.12, end: 0),
+          ],
+        ),
         if (drift != null) ...[
           const SizedBox(height: RatrooTheme.space4),
           _MovedBanner(to: drift),
         ],
       ],
     );
-  }
-
-  /// Four ways in, as one grouped control rather than four coloured tiles.
-  ///
-  /// The previous version gave each action its own saturated colour — blue,
-  /// teal, purple, pink. Two things were wrong with that. Colour in this app
-  /// means *mode*: blue is bus, purple is rail, cyan is ferry. Spending those
-  /// colours on actions that are not modes breaks the one visual system a
-  /// rider learns. And four equally loud tiles have no hierarchy, which is the
-  /// look of a generated dashboard rather than a designed screen.
-  ///
-  /// So: one surface, monochrome glyphs, and exactly one action carrying the
-  /// brand colour — planning a trip is what this app is for.
-  Widget _buildQuickAccess(BuildContext context) {
-    final theme = Theme.of(context);
-
-    const items = [
-      (AppIcons.planSolid, 'Plan', '/journey-planner', true),
-      (AppIcons.nearMeSolid, 'Nearby', '/nearby', false),
-      (AppIcons.exploreSolid, 'Explore', '/providers', false),
-      (AppIcons.assistantSolid, 'Assistant', '/assistant', false),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: RatrooTheme.space4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(RatrooTheme.radiusXl),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          for (final item in items)
-            Expanded(
-              child: _QuickAccessTile(
-                icon: item.$1,
-                label: item.$2,
-                route: item.$3,
-                primary: item.$4,
-              ),
-            ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 250.ms).slideY(begin: 0.1, end: 0);
   }
 
   /// The main way in. Sized and weighted as the primary action rather than a
@@ -383,24 +367,15 @@ class HomeScreen extends ConsumerWidget {
     return TiltTap(
       onTap: () => context.push('/search'),
       borderRadius: BorderRadius.circular(RatrooTheme.radiusPill),
-      child: Container(
+      // Frosted rather than solid, so it belongs to the glass panel above it
+      // instead of looking like a separate white slab dropped on the page.
+      child: GlassContainer(
+        blur: 18,
+        opacity: 0.86,
+        borderRadius: BorderRadius.circular(RatrooTheme.radiusPill),
         padding: const EdgeInsets.symmetric(
           horizontal: RatrooTheme.space4,
           vertical: RatrooTheme.space3,
-        ),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(RatrooTheme.radiusPill),
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.primary.withValues(alpha: 0.10),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            ),
-          ],
         ),
         child: Row(
           children: [
@@ -672,11 +647,24 @@ class HomeScreen extends ConsumerWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  // The region names itself: "West Bengal network" in Kolkata,
-                  // "Karnataka network" in Bengaluru.
-                  '${coverage.region} network',
-                  style: theme.textTheme.headlineSmall,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        // The region names itself: "West Bengal network" in
+                        // Kolkata, "Karnataka network" in Bengaluru.
+                        '${coverage.region} network',
+                        style: theme.textTheme.headlineSmall,
+                      ),
+                    ),
+                    // The operators list lost its tile when the duplicated
+                    // action card went; it belongs here, beside the network it
+                    // describes.
+                    TextButton(
+                      onPressed: () => context.push('/providers'),
+                      child: const Text('Operators'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: RatrooTheme.space1),
                 Text(
@@ -741,14 +729,24 @@ class HomeScreen extends ConsumerWidget {
       children: [
         Text('Your journeys', style: theme.textTheme.headlineSmall),
         const SizedBox(height: 16),
+        // Answers kept from the assistant sit above saved routes: they are the
+        // more recent thing a rider chose to keep, and the reason they opened
+        // this section.
+        const _SavedAnswers(),
         routesAsync.when(
           data: (response) {
             final routes = response.data ?? [];
             if (routes.isEmpty) {
+              // Only an empty section when there is nothing of either kind —
+              // "No saved routes yet" under three saved answers reads as a bug.
+              final answers =
+                  ref.watch(savedAnswersProvider).valueOrNull ?? const [];
+              if (answers.isNotEmpty) return const SizedBox.shrink();
               return _buildEmptyState(
                 context,
                 icon: AppIcons.bookmark,
-                message: 'No saved routes yet.',
+                message:
+                    'Nothing saved yet. Ask Ratroo a question and keep the answer.',
               );
             }
             return Column(
@@ -957,31 +955,26 @@ class HomeScreen extends ConsumerWidget {
       backgroundColor: theme.colorScheme.surface,
       height: 68,
       indicatorColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-      selectedIndex: 2,
+      selectedIndex: 0,
       onDestinationSelected: (index) {
-        // Was a hardcoded route uuid that 404s once that row is reprojected.
-        if (index == 0) context.push('/journey-planner');
-        // Search opened the Journey Planner, so there was no way to look up a
-        // single stop by name. It now opens stop search.
-        if (index == 1) context.push('/search');
-        if (index == 3) context.push('/nearby');
+        // Search is not a tab: the hero search bar on this screen is the way
+        // in, and a tab repeating it was the same duplication as the action
+        // card that used to sit above the fold.
+        if (index == 1) context.push('/journey-planner');
+        if (index == 2) context.push('/nearby');
+        if (index == 3) context.push('/assistant');
         if (index == 4) context.push('/profile');
       },
       destinations: const [
         NavigationDestination(
-          icon: Icon(AppIcons.alternatives),
-          selectedIcon: Icon(AppIcons.alternativesSelected),
-          label: 'Plan',
-        ),
-        NavigationDestination(
-          icon: Icon(AppIcons.search),
-          selectedIcon: Icon(AppIcons.searchSelected),
-          label: 'Search',
-        ),
-        NavigationDestination(
           icon: Icon(AppIcons.home),
           selectedIcon: Icon(AppIcons.homeSelected),
           label: 'Home',
+        ),
+        NavigationDestination(
+          icon: Icon(AppIcons.alternatives),
+          selectedIcon: Icon(AppIcons.alternativesSelected),
+          label: 'Plan',
         ),
         // Was a bookmark, which is a different promise: this tab shows what is
         // around the rider now, not what they saved.
@@ -989,6 +982,11 @@ class HomeScreen extends ConsumerWidget {
           icon: Icon(AppIcons.nearMe),
           selectedIcon: Icon(AppIcons.nearMeSelected),
           label: 'Nearby',
+        ),
+        NavigationDestination(
+          icon: Icon(AppIcons.assistant),
+          selectedIcon: Icon(AppIcons.assistant),
+          label: 'Ask',
         ),
         NavigationDestination(
           icon: Icon(AppIcons.user),
@@ -1001,52 +999,183 @@ class HomeScreen extends ConsumerWidget {
 }
 
 /// One Quick Access square: icon over a two-line label, whole tile tappable.
-class _QuickAccessTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String route;
 
-  /// The one action the screen is really for. Exactly one of these is true.
-  final bool primary;
+/// Assistant answers the rider kept, newest first.
+class _SavedAnswers extends ConsumerWidget {
+  const _SavedAnswers();
 
-  const _QuickAccessTile({
-    required this.icon,
-    required this.label,
-    required this.route,
-    required this.primary,
-  });
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final answers =
+        ref.watch(savedAnswersProvider).valueOrNull ?? const <SavedAnswer>[];
+    if (answers.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        for (final answer in answers.take(3))
+          Padding(
+            padding: const EdgeInsets.only(bottom: RatrooTheme.space3),
+            child: _SavedAnswerCard(answer: answer),
+          ),
+      ],
+    );
+  }
+}
+
+class _SavedAnswerCard extends ConsumerWidget {
+  final SavedAnswer answer;
+
+  const _SavedAnswerCard({required this.answer});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+
+    return Dismissible(
+      key: ValueKey(answer.id),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) =>
+          ref.read(savedAnswersProvider.notifier).remove(answer.id),
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: RatrooTheme.space6),
+        decoration: BoxDecoration(
+          color: RatrooTheme.confidenceLowFill.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
+        ),
+        child: const Icon(AppIcons.close, color: RatrooTheme.confidenceLowText),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(RatrooTheme.space4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  AppIcons.assistant,
+                  size: 15,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: RatrooTheme.space2),
+                Expanded(
+                  child: Text(
+                    answer.question.isEmpty ? 'Saved answer' : answer.question,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                Text(
+                  timeAgo(answer.savedAt),
+                  style: theme.textTheme.labelSmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: RatrooTheme.space2),
+            Text(
+              answer.answer,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
+            // The provenance the live bubble showed, kept with the answer. An
+            // ungrounded reply must not gain authority by being saved.
+            if (answer.fromLiveData) ...[
+              const SizedBox(height: RatrooTheme.space2),
+              Row(
+                children: [
+                  const Icon(
+                    AppIcons.verified,
+                    size: 12,
+                    color: RatrooTheme.confidenceHighText,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'From live route data',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: RatrooTheme.confidenceHighText,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The rider's account, reachable from the first line of the screen.
+///
+/// Shows their initial once we know it. Signed out, it shows a person glyph
+/// rather than a guessed letter — an avatar reading "R" for a stranger is
+/// worse than an obviously empty one.
+class _AccountButton extends StatelessWidget {
+  final String? name;
+  final String? email;
+
+  const _AccountButton({required this.name, required this.email});
+
+  String? get _initial {
+    for (final source in [name, email]) {
+      final value = source?.trim();
+      if (value != null && value.isNotEmpty) return value[0].toUpperCase();
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tint = primary
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurface.withValues(alpha: 0.72);
+    final initial = _initial;
 
-    return InkWell(
-      onTap: () => context.push(route),
-      borderRadius: BorderRadius.circular(RatrooTheme.radiusMd),
-      child: Padding(
-        // Vertical padding keeps each target past the 48dp minimum without a
-        // border drawing a box around it.
-        padding: const EdgeInsets.symmetric(vertical: RatrooTheme.space2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 26, color: tint),
-            const SizedBox(height: RatrooTheme.space2),
-            Text(
-              label,
-              maxLines: 1,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: primary
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurface,
-                fontWeight: primary ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0,
-              ),
+    return Semantics(
+      button: true,
+      label: 'Your account',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(RatrooTheme.radiusPill),
+        onTap: () => context.push('/profile'),
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
             ),
-          ],
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Center(
+            child: initial == null
+                ? Icon(
+                    AppIcons.user,
+                    size: 19,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  )
+                : Text(
+                    initial,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+          ),
         ),
       ),
     );

@@ -53,6 +53,7 @@ dependencies:
   # Material's shared-element / container transforms. Hand-rolling Hero choreography
   # is exactly the wheel this package already turns.
   animations: ^2.2.0
+  video_player: ^2.11.1
 
 dev_dependencies:
   flutter_test:

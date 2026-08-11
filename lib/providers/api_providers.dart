@@ -15,7 +15,9 @@ import '../services/favorites_service.dart';
 final nowProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
 /// Device location, shared by every screen that needs "near me".
-final locationServiceProvider = Provider<LocationService>((ref) => LocationService());
+final locationServiceProvider = Provider<LocationService>(
+  (ref) => LocationService(),
+);
 
 /// The user's position, or the Kolkata fallback with a status explaining why.
 /// Never fails — a refused permission is an answer, not an error.
@@ -41,19 +43,33 @@ UserLocation? driftedTo(UserLocation? shown, UserLocation actual) {
   if (shown == null || !shown.isLive || !actual.isLive) return null;
 
   final moved = distanceMetres(
-      shown.latitude, shown.longitude, actual.latitude, actual.longitude);
+    shown.latitude,
+    shown.longitude,
+    actual.latitude,
+    actual.longitude,
+  );
 
   return moved >= kLocationDriftMetres ? actual : null;
 }
 
 /// Re-reads the device position and reports whether it has drifted from what
 /// the UI is showing. Called when the app returns to the foreground.
-Future<void> checkLocationDrift(WidgetRef ref) async {
+///
+/// [mounted] is passed rather than assumed: this runs on resume, and the fix
+/// it waits for can outlive the widget that asked for it. Touching `ref`
+/// afterwards throws 'Cannot use "ref" after the widget was disposed'.
+Future<void> checkLocationDrift(
+  WidgetRef ref, {
+  bool Function()? mounted,
+}) async {
   final shown = ref.read(userLocationProvider).valueOrNull;
   if (shown == null || !shown.isLive) return;
 
-  final actual = await ref.read(locationServiceProvider).current(forceRefresh: true);
+  final actual = await ref
+      .read(locationServiceProvider)
+      .current(forceRefresh: true);
 
+  if (mounted != null && !mounted()) return;
   ref.read(locationDriftProvider.notifier).state = driftedTo(shown, actual);
 }
 
@@ -115,7 +131,6 @@ final nearbyServiceProvider = Provider<NearbyService>((ref) {
   final client = ref.watch(apiClientProvider);
   return NearbyService(client);
 });
-
 
 // Favorites Service Provider
 final favoritesServiceProvider = Provider<FavoritesService>((ref) {

@@ -2,8 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ratroo_app/core/format.dart';
 import 'package:ratroo_app/models/place.dart';
 
-Place _stop(String name, {double? metres}) =>
-    Place(id: name, canonicalName: name, distanceMetres: metres);
+Place _stop(String name, {double? metres, List<String> routes = const []}) =>
+    Place(
+      id: name,
+      canonicalName: name,
+      distanceMetres: metres,
+      routes: [
+        for (final route in routes)
+          PlaceRoute(id: route, name: route, providerCode: 'WBBUS'),
+      ],
+    );
 
 void main() {
   group('titleCaseName', () {
@@ -29,9 +37,9 @@ void main() {
     });
   });
 
-  group('dedupeSamePlace', () {
+  group('mergeSamePlace', () {
     test('collapses the same stop imported under different casing', () {
-      final result = dedupeSamePlace([
+      final result = mergeSamePlace([
         _stop('KOLKATA', metres: 120),
         _stop('Kolkata', metres: 140),
         _stop('Kolkata', metres: 200),
@@ -45,7 +53,7 @@ void main() {
     test('keeps namesakes that are genuinely far apart', () {
       // Operators name stops after the locality, so two real stops can share
       // a name. Collapsing those would hide services.
-      final result = dedupeSamePlace([
+      final result = mergeSamePlace([
         _stop('Bazar', metres: 100),
         _stop('Bazar', metres: 4200),
       ]);
@@ -55,13 +63,32 @@ void main() {
 
     test('without distances nothing is merged', () {
       // Search results carry no distance; a guess there could hide a stop.
-      final result = dedupeSamePlace([_stop('Kolkata'), _stop('KOLKATA')]);
+      final result = mergeSamePlace([_stop('Kolkata'), _stop('KOLKATA')]);
 
       expect(result.length, 2);
     });
 
+    test('merged rows keep every operator\'s services', () {
+      // The three "Kolkata" cards each carried different routes. Dropping all
+      // but the first would have hidden two thirds of the services — worse
+      // than the duplication being fixed.
+      final result = mergeSamePlace([
+        _stop('KOLKATA', metres: 120, routes: ['Bishnupur', 'Chandrakona']),
+        _stop('Kolkata', metres: 140, routes: ['Alipurduar', 'Cooch Behar']),
+        _stop('Kolkata', metres: 200, routes: ['Arambag', 'Bishnupur']),
+      ]);
+
+      expect(result.length, 1);
+      expect(
+        result.single.routes.map((r) => r.id).toSet(),
+        {'Bishnupur', 'Chandrakona', 'Alipurduar', 'Cooch Behar', 'Arambag'},
+      );
+      // The nearest record supplies identity and distance.
+      expect(result.single.distanceMetres, 120);
+    });
+
     test('different stops are never touched', () {
-      final result = dedupeSamePlace([
+      final result = mergeSamePlace([
         _stop('BB Ganguly Xing', metres: 300),
         _stop('BB Ganguly St.', metres: 310),
       ]);
