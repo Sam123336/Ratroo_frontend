@@ -25,6 +25,14 @@ class CoverageSummary {
   /// that looks like a loading state.
   final List<ModeCoverage> byMode;
 
+  /// The same counts grouped by city, busiest first.
+  ///
+  /// Trams and ferries exist in exactly one city; a state-wide list implies
+  /// they run everywhere. Sparse by design — `stops.city` is not filled for
+  /// most rows, and those stay in the state totals rather than becoming a city
+  /// called "Unknown".
+  final List<CityCoverage> byCity;
+
   const CoverageSummary({
     this.region,
     this.stateCode,
@@ -33,6 +41,7 @@ class CoverageSummary {
     this.stopCount = 0,
     this.lastUpdated,
     this.byMode = const [],
+    this.byCity = const [],
   });
 
   /// Counts for one mode, or null when we hold no routes of that kind.
@@ -54,7 +63,9 @@ class CoverageSummary {
 
     final rest = labels.sublist(1);
     final last = rest.removeLast();
-    return rest.isEmpty ? '$head and $last' : '$head, ${rest.join(', ')} and $last';
+    return rest.isEmpty
+        ? '$head and $last'
+        : '$head, ${rest.join(', ')} and $last';
   }
 
   static String _label(String mode) {
@@ -88,9 +99,15 @@ class CoverageSummary {
       lastUpdated: DateTime.tryParse(json['lastUpdated'] as String? ?? ''),
       byMode: json['byMode'] is List
           ? (json['byMode'] as List)
-              .whereType<Map<String, dynamic>>()
-              .map(ModeCoverage.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(ModeCoverage.fromJson)
+                .toList()
+          : const [],
+      byCity: json['byCity'] is List
+          ? (json['byCity'] as List)
+                .whereType<Map<String, dynamic>>()
+                .map(CityCoverage.fromJson)
+                .toList()
           : const [],
     );
   }
@@ -111,8 +128,32 @@ class ModeCoverage {
   });
 
   factory ModeCoverage.fromJson(Map<String, dynamic> json) => ModeCoverage(
-        mode: (json['mode'] as String? ?? '').toLowerCase(),
-        routeCount: (json['routeCount'] as num?)?.toInt() ?? 0,
-        stopCount: (json['stopCount'] as num?)?.toInt() ?? 0,
-      );
+    mode: (json['mode'] as String? ?? '').toLowerCase(),
+    routeCount: (json['routeCount'] as num?)?.toInt() ?? 0,
+    stopCount: (json['stopCount'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// What runs in one city.
+class CityCoverage {
+  final String city;
+  final int routeCount;
+  final List<ModeCoverage> byMode;
+
+  const CityCoverage({
+    required this.city,
+    required this.routeCount,
+    required this.byMode,
+  });
+
+  factory CityCoverage.fromJson(Map<String, dynamic> json) => CityCoverage(
+    city: json['city'] as String? ?? '',
+    routeCount: (json['routeCount'] as num?)?.toInt() ?? 0,
+    byMode: json['byMode'] is List
+        ? (json['byMode'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map(ModeCoverage.fromJson)
+              .toList()
+        : const [],
+  );
 }

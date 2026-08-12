@@ -19,6 +19,8 @@ import '../widgets/bus_banner.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/tilt_tap.dart';
 import '../core/app_icons.dart';
+import '../widgets/city_card.dart';
+import '../widgets/not_serviced_yet.dart';
 
 // Stops around wherever the user actually is, widening the search until it
 // finds some. In rural West Bengal the nearest stop can be 10 km away.
@@ -75,8 +77,6 @@ const _modeChips = <String, (IconData, String)>{
   'shared_auto': (AppIcons.sharedAuto, 'Shared auto'),
   'metro': (AppIcons.metro, 'Metro'),
 };
-
-const _modePhotos = {'bus', 'rail', 'ferry', 'tram'};
 
 /// Coverage where the user actually is, not a fixed West Bengal claim.
 final homeCoverageProvider =
@@ -223,8 +223,6 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(height: RatrooTheme.space6),
                 _buildNearbySection(context, ref),
                 const SizedBox(height: RatrooTheme.space8),
-                _buildNetworkSection(context, ref),
-                const SizedBox(height: RatrooTheme.space8),
                 _buildSavedRoutes(context, ref),
                 // Clears the floating navigation bar, which now sits over the
                 // list instead of below it.
@@ -300,30 +298,30 @@ class HomeScreen extends ConsumerWidget {
         // beside it. Dark text straight onto the animation would be illegible
         // wherever the bus or a tree passed behind it; the panel guarantees
         // contrast whatever frame is showing, and still lets the scene through.
-        // The panel is positioned from the top rather than pinned to the
-        // bottom. Bottom-aligned, it grew upwards with its own content and
-        // swallowed most of the banner — the bus was behind the glass instead
-        // of beside it. Starting it at a fixed offset means the overlap is a
-        // decision, not a side effect of how long the subtitle happens to be.
-        Stack(
-          alignment: Alignment.topCenter,
-          children: [
-            const BusBanner(height: 190),
-            Padding(
-              padding: const EdgeInsets.only(top: 168),
-              child: GlassContainer(
-                blur: 18,
-                opacity: 0.82,
-                padding: const EdgeInsets.all(RatrooTheme.space6),
-                borderRadius: BorderRadius.circular(RatrooTheme.radiusXl),
+        // Compact hero: words left, bus right.
+        //
+        // A Row, not a Stack with Positioned children. The stacked version put
+        // the video on the wrong side and over the text, and each attempt to
+        // correct it was a guess at how the constraints resolved. A Row cannot
+        // get the order wrong, and the text can never be overlapped because
+        // the two occupy different space.
+        SizedBox(
+          height: 176,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Where would you\nlike to go today?',
+                      // No hardcoded break: the column is narrower now, and a
+                      // fixed newline on top of natural wrapping produced four
+                      // ragged lines.
+                      'Where would you like to go today?',
                       style: GoogleFonts.outfit(
-                        fontSize: 30,
+                        fontSize: 26,
                         height: 1.15,
                         fontWeight: FontWeight.bold,
                         letterSpacing: -0.5,
@@ -332,25 +330,72 @@ class HomeScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: RatrooTheme.space2),
                     Text(
-                      // Was "Live bus, metro, rail and ferry across West Bengal"
-                      // for everyone — wrong in Karnataka, and wrong about metro
-                      // everywhere, since no metro routes are mapped at all.
                       _subtitle(ref),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.7,
-                        ),
-                      ),
+                      style: theme.textTheme.bodySmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (area != null) ...[
-                      const SizedBox(height: RatrooTheme.space4),
+                      const SizedBox(height: RatrooTheme.space3),
                       _LocationPill(area: area),
                     ],
                   ],
                 ),
               ),
-            ).animate().fadeIn(delay: 80.ms).slideY(begin: 0.12, end: 0),
-          ],
+              // Slides back under the words and dissolves into the page
+              // instead of ending on a hard edge. Translate, not margin, so
+              // the Row's layout — and therefore the left/right order — is
+              // untouched; only the paint moves.
+              // Slot the Row lays out; the video paints wider than it and
+              // both fades happen *inside* that wider box.
+              //
+              // The masks used to wrap the outer box, so the gradient was
+              // measured against 178px while the video painted 232 — the last
+              // 54px got no fade and ended on a hard rectangle edge.
+              SizedBox(
+                width: 178,
+                height: 176,
+                child: OverflowBox(
+                  alignment: Alignment.centerLeft,
+                  maxWidth: 232,
+                  child: Transform.translate(
+                    offset: const Offset(-30, 0),
+                    child: ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.white,
+                          Colors.white,
+                          Colors.transparent,
+                        ],
+                        stops: [0.0, 0.16, 0.84, 1.0],
+                      ).createShader(bounds),
+                      blendMode: BlendMode.dstIn,
+                      child: ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [Colors.transparent, Colors.white],
+                          stops: [0.0, 0.42],
+                        ).createShader(bounds),
+                        blendMode: BlendMode.dstIn,
+                        child: const SizedBox(
+                          width: 232,
+                          height: 176,
+                          child: BusBanner(
+                            height: 176,
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         if (drift != null) ...[
           const SizedBox(height: RatrooTheme.space4),
@@ -476,7 +521,29 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                 ],
-                _modeRow(context, chips, coverage),
+                // Nothing mapped where they are: say so, and offer to tell
+                // them when that changes. Lived in the network section until
+                // that section was folded into the card.
+                if (coverage != null && !coverage.hasCoverage)
+                  NotServicedYet(
+                    stateCode: coverage.stateCode ?? 'UNKNOWN',
+                    regionName: coverage.region,
+                    latitude: ref
+                        .watch(userLocationProvider)
+                        .valueOrNull
+                        ?.latitude,
+                    longitude: ref
+                        .watch(userLocationProvider)
+                        .valueOrNull
+                        ?.longitude,
+                  )
+                else if (coverage != null)
+                  CityCard(
+                    city: ref.watch(homeAreaProvider),
+                    coverage: coverage,
+                  )
+                else
+                  _modeRow(context, chips, coverage),
               ],
             );
           },
@@ -542,22 +609,7 @@ class HomeScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Column(
           children: [
-            if (_modePhotos.contains(mode))
-              // A photograph of the actual vehicle reads faster than a glyph,
-              // and a Kolkata tram looks nothing like a generic tram icon.
-              ClipOval(
-                child: Image.asset(
-                  'assets/brand/mode_$mode.jpg',
-                  width: 62,
-                  height: 62,
-                  fit: BoxFit.cover,
-                  semanticLabel: label,
-                  // A missing or corrupt asset must not take the row down.
-                  errorBuilder: (_, _, _) => _modeGlyph(theme, icon),
-                ),
-              )
-            else
-              _modeGlyph(theme, icon),
+            _modeGlyph(theme, icon),
             const SizedBox(height: 8),
             Text(label, style: theme.textTheme.labelLarge),
             // The count lives with the mode it describes rather than in a
@@ -618,113 +670,6 @@ class HomeScreen extends ConsumerWidget {
   /// Reliable". Both values were defaults for an endpoint that returns 501, so
   /// the figure never changed and measured nothing. A route count is a fact we
   /// actually hold.
-  /// The network, mode by mode, with the counts we actually hold.
-  ///
-  /// Was a single "N routes" line. A rider cannot tell from one number whether
-  /// their ferry is covered, and the old card implied the whole network was
-  /// equally mapped when metro has nothing in it at all.
-  Widget _buildNetworkSection(BuildContext context, WidgetRef ref) {
-    final countAsync = ref.watch(homeCoverageProvider);
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        countAsync.when(
-          data: (response) {
-            final coverage = response.data;
-            if (coverage == null || !coverage.hasCoverage) {
-              return GlassContainer(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  // Distinguishes "we have nothing here" from "the request
-                  // failed" — both used to read as a loading error.
-                  coverage == null
-                      ? 'Could not load coverage right now.'
-                      : 'No routes are mapped around you yet.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-              );
-            }
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        // The region names itself: "West Bengal network" in
-                        // Kolkata, "Karnataka network" in Bengaluru.
-                        '${coverage.region} network',
-                        style: theme.textTheme.headlineSmall,
-                      ),
-                    ),
-                    // The operators list lost its tile when the duplicated
-                    // action card went; it belongs here, beside the network it
-                    // describes.
-                    TextButton(
-                      onPressed: () => context.push('/providers'),
-                      child: const Text('Operators'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: RatrooTheme.space1),
-                Text(
-                  // The stop count is only claimed when we have one. An older
-                  // API build sends no count, and "across 0 stops" reads as an
-                  // empty network rather than a missing field.
-                  coverage.stopCount > 0
-                      ? '${groupedNumber(coverage.routeCount)} routes across '
-                            '${groupedNumber(coverage.stopCount)} stops. '
-                            'Not every route has a published timetable yet.'
-                      : '${groupedNumber(coverage.routeCount)} routes. '
-                            'Not every route has a published timetable yet.',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                if (coverage.lastUpdated != null) ...[
-                  const SizedBox(height: RatrooTheme.space2),
-                  Row(
-                    children: [
-                      Icon(
-                        AppIcons.time,
-                        size: 14,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.45,
-                        ),
-                      ),
-                      const SizedBox(width: RatrooTheme.space2),
-                      Text(
-                        'Updated ${timeAgo(coverage.lastUpdated!)}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            );
-          },
-          loading: () =>
-              Container(
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  )
-                  .animate(onPlay: (controller) => controller.repeat())
-                  .shimmer(
-                    duration: 1200.ms,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-                  ),
-          error: (err, stack) => _buildErrorState(context, err.toString()),
-        ),
-      ],
-    ).animate().fadeIn(delay: 400.ms);
-  }
-
   Widget _buildSavedRoutes(BuildContext context, WidgetRef ref) {
     final routesAsync = ref.watch(homeSavedRoutesProvider);
     final theme = Theme.of(context);
@@ -762,15 +707,13 @@ class HomeScreen extends ConsumerWidget {
                     onTap: () => context.push('/route-details?id=${route.id}'),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.03,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.08,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.07,
+                            ),
                           ),
                         ),
                       ),
@@ -1050,13 +993,17 @@ class _SavedAnswerCard extends ConsumerWidget {
         ),
         child: const Icon(AppIcons.close, color: RatrooTheme.confidenceLowText),
       ),
+      // Deliberately not a card. Every block on this screen had the same
+      // surface, radius and shadow, so nothing led and the page read as a
+      // stack of identical tiles. The city card is the one raised surface;
+      // saved answers are rows on the page, separated by a rule.
       child: Container(
-        padding: const EdgeInsets.all(RatrooTheme.space4),
+        padding: const EdgeInsets.symmetric(vertical: RatrooTheme.space4),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+          border: Border(
+            bottom: BorderSide(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.07),
+            ),
           ),
         ),
         child: Column(

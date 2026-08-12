@@ -6,29 +6,11 @@ import 'app_icons.dart';
 ///
 /// Every list drew a bus, so tram stops and ferry ghats looked like bus stops.
 /// Shared so the nearby list and the detail screen cannot drift apart again.
-/// Photo of the vehicle for a stop category, or null when there is none.
+/// The stop's mode as a tinted circular glyph.
 ///
-/// Only the modes we hold a picture for. A generic "STOP" gets no photo,
-/// because guessing which vehicle to show is the same mistake as labelling
-/// every stop a bus stop.
-String? modePhoto(String? category) {
-  switch (category) {
-    case 'BUS_STOP':
-      return 'assets/brand/mode_bus.jpg';
-    case 'RAIL_STOP':
-    case 'RAIL_STATION':
-      return 'assets/brand/mode_rail.jpg';
-    case 'FERRY_STOP':
-    case 'FERRY_GHAT':
-      return 'assets/brand/mode_ferry.jpg';
-    case 'TRAM_STOP':
-      return 'assets/brand/mode_tram.jpg';
-    default:
-      return null;
-  }
-}
-
-/// Circular photo of the vehicle, falling back to the tinted glyph.
+/// Was a photograph per mode. Four stock images of vehicles said nothing a
+/// rider could act on, repeated identically down every list, and shipped
+/// megabytes to say what a 20px icon says better.
 class ModeAvatar extends StatelessWidget {
   final String? category;
   final double size;
@@ -38,7 +20,6 @@ class ModeAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final photo = modePhoto(category);
 
     final glyph = Container(
       width: size,
@@ -47,21 +28,14 @@ class ModeAvatar extends StatelessWidget {
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
         shape: BoxShape.circle,
       ),
-      child: Icon(modeIcon(category), color: theme.colorScheme.primary, size: size * 0.5),
-    );
-
-    if (photo == null) return glyph;
-
-    return ClipOval(
-      child: Image.asset(
-        photo,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        // A missing asset must not blank out the whole list.
-        errorBuilder: (_, _, _) => glyph,
+      child: Icon(
+        modeIcon(category),
+        color: theme.colorScheme.primary,
+        size: size * 0.5,
       ),
     );
+
+    return glyph;
   }
 }
 

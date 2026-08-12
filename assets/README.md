@@ -62,13 +62,16 @@ biggest thing blocking the app's "wow" gap. See **Wanted** below.
 | File | Source | Licence |
 |---|---|---|
 | `ratroo_logo.png`, `ratroo_icon.png`, `ratroo_icon_foreground.png` | Generated in-project by `tool/build_brand_assets.py` | Owned |
-| `mode_bus.jpg`, `mode_rail.jpg`, `mode_ferry.jpg`, `mode_tram.jpg` | ⚠️ **unrecorded — needs confirming** | ⚠️ **unknown** |
 | `hero_bus.jpg`, `hero_rail.jpg`, `hero_ferry.jpg`, `hero_tram.jpg` | ⚠️ **unrecorded — needs confirming** | ⚠️ **unknown** |
 
-> **Open item:** the eight photographs predate this file and their origin is not
+> **Open item:** the four remaining photographs predate this file and their origin is not
 > recorded anywhere in the repo. Before any public release, either confirm their
 > licence or replace them. Unlicensed stock photography in a shipped app is a
 > real liability, not a formality.
+
+> The four `mode_*.jpg` vehicle photographs were removed: the city card shows
+> mode glyphs and counts instead, which say more in less space and carry no
+> licence risk.
 
 ### Icons
 
