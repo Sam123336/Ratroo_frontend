@@ -78,6 +78,10 @@ IconData modeIcon(String? category) {
     case 'METRO_STOP':
     case 'METRO_STATION':
       return AppIcons.metro;
+    case 'AUTO_STAND':
+      return AppIcons.auto;
+    case 'SHARED_AUTO_STAND':
+      return AppIcons.sharedAuto;
     case 'BUS_STOP':
       return AppIcons.bus;
     default:

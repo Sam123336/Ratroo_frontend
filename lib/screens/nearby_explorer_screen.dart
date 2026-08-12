@@ -144,8 +144,15 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
     _mapController.move(camera.center, (camera.zoom + delta).clamp(3.0, 19.0));
   }
 
-  String _modeLabel(String mode) =>
-      mode[0].toUpperCase() + mode.substring(1).toLowerCase();
+  /// "shared_auto" -> "Shared auto". The generic title-case left the
+  /// underscore in, so the app bar read "Nearby Shared_auto".
+  String _modeLabel(String mode) {
+    final words = mode.toLowerCase().split('_');
+    return [
+      words.first[0].toUpperCase() + words.first.substring(1),
+      ...words.skip(1),
+    ].join(' ');
+  }
 
   /// Stop categories look like BUS_STOP / METRO_STATION / FERRY_TERMINAL.
   List<Place> _applyModeFilter(List<Place> places) {

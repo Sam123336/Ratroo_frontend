@@ -68,6 +68,11 @@ const _modeChips = <String, (IconData, String)>{
   'rail': (AppIcons.rail, 'Train'),
   'ferry': (AppIcons.ferry, 'Ferry'),
   'tram': (AppIcons.tram, 'Tram'),
+  // Only ever shown where they exist: the mode row is built from the modes the
+  // region actually reports, so these stay absent until an operator registers
+  // one.
+  'auto': (AppIcons.auto, 'Auto'),
+  'shared_auto': (AppIcons.sharedAuto, 'Shared auto'),
   'metro': (AppIcons.metro, 'Metro'),
 };
 

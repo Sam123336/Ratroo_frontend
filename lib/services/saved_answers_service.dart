@@ -128,7 +128,4 @@ class SavedAnswersNotifier extends AsyncNotifier<List<SavedAnswer>> {
     final next = await ref.read(savedAnswersServiceProvider).remove(id);
     state = AsyncData(next);
   }
-
-  bool contains(String id) =>
-      state.valueOrNull?.any((answer) => answer.id == id) ?? false;
 }

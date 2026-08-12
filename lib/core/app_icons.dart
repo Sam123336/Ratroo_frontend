@@ -22,6 +22,12 @@ class AppIcons {
   static const metro = PhosphorIconsRegular.subway;
   static const walk = PhosphorIconsRegular.personSimpleWalk;
 
+  // Auto-rickshaws and shared taxis: the services registered operators run
+  // that no scraper covers. Phosphor has no rickshaw, and a car would read as
+  // a private hire — a small three-wheeler is closer to what pulls up.
+  static const auto = PhosphorIconsRegular.scooter;
+  static const sharedAuto = PhosphorIconsRegular.taxi;
+
   // Places and position.
   static const place = PhosphorIconsRegular.mapPin;
   static const map = PhosphorIconsRegular.mapTrifold;

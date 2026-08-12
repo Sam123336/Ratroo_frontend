@@ -50,6 +50,10 @@ class RatrooTheme {
     'ferry': secondaryColor,
     'tram': Color(0xFFDB2777),
     'metro': Color(0xFF059669),
+    // Amber: the colour an auto actually is on a West Bengal road, and far
+    // enough from bus blue and tram pink to stay distinct in a list.
+    'auto': Color(0xFFD97706),
+    'shared_auto': Color(0xFFB45309),
     'walk': Color(0xFF64748B),
   };
 
