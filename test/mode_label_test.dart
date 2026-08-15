@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ratroo_app/core/theme.dart';
 
@@ -24,8 +25,25 @@ void main() {
     });
 
     test('an unknown mode still renders rather than throwing', () {
-      expect(RatrooTheme.modeColor('hovercraft'), RatrooTheme.primaryColor);
-      expect(RatrooTheme.modeColor(null), RatrooTheme.primaryColor);
+      expect(RatrooTheme.modeColor('hovercraft'), isA<Color>());
+      expect(RatrooTheme.modeColor(null), isA<Color>());
+    });
+
+    test('an unknown mode is never painted the brand colour', () {
+      // The fallback used to be primaryColor. Once the brand went saffron,
+      // that made every unrecognised mode look like the app's primary action.
+      expect(RatrooTheme.modeColor('hovercraft'),
+          isNot(RatrooTheme.primaryColor));
+      expect(RatrooTheme.modeColor(null), isNot(RatrooTheme.primaryColor));
+    });
+
+    test('no mode aliases the brand colour', () {
+      // Chrome and data must stay separate hues: bus used to *be*
+      // primaryColor, so it turned saffron with the rebrand.
+      for (final entry in RatrooTheme.modeColors.entries) {
+        expect(entry.value, isNot(RatrooTheme.primaryColor),
+            reason: '${entry.key} must not reuse the brand colour');
+      }
     });
   });
 }

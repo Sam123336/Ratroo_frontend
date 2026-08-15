@@ -57,7 +57,13 @@ class _SkeletonCard extends StatelessWidget {
         padding: const EdgeInsets.all(RatrooTheme.space4),
         child: Row(
           children: [
-            const CircleAvatar(radius: 22),
+            // Explicit neutral: CircleAvatar defaults to the scheme's primary,
+            // so every loading row showed a solid saffron disc — a bone that
+            // draws the eye is the opposite of a bone.
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+            ),
             const SizedBox(width: RatrooTheme.space4),
             Expanded(
               child: Column(

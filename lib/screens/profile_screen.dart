@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme.dart';
+import '../widgets/app_shell.dart';
+
 import '../providers/api_providers.dart';
 import '../services/auth_service.dart';
 import '../core/app_icons.dart';
@@ -18,6 +20,12 @@ class ProfileScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: SafeArea(
+        // bottom: false — the floating bar is cleared by AppShell.contentInset at
+        // the end of the scroll, not here. Under `extendBody: true` Flutter
+        // already adds the bar's height to this body's MediaQuery, so a
+        // bottom-safe SafeArea reserves it a second time and leaves a gap the
+        // size of the bar below the content.
+        bottom: false,
         child: userAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           // A failure here means "couldn't confirm a session", so show signed-out.
@@ -40,7 +48,11 @@ class _SignedOut extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(AppIcons.user, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+            Icon(
+              AppIcons.user,
+              size: 64,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
             const SizedBox(height: RatrooTheme.space4),
             Text('You are not signed in', style: theme.textTheme.titleLarge),
             const SizedBox(height: RatrooTheme.space2),
@@ -89,11 +101,16 @@ class _SignedInState extends ConsumerState<_SignedIn> {
     final initial = (user.displayName?.isNotEmpty ?? false)
         ? user.displayName![0].toUpperCase()
         : user.email.isNotEmpty
-            ? user.email[0].toUpperCase()
-            : '?';
+        ? user.email[0].toUpperCase()
+        : '?';
 
     return ListView(
-      padding: const EdgeInsets.all(RatrooTheme.space6),
+      padding: const EdgeInsets.fromLTRB(
+        RatrooTheme.space6,
+        RatrooTheme.space6,
+        RatrooTheme.space6,
+        AppShell.contentInset,
+      ),
       children: [
         Center(
           child: CircleAvatar(
@@ -101,13 +118,18 @@ class _SignedInState extends ConsumerState<_SignedIn> {
             backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
             child: Text(
               initial,
-              style: theme.textTheme.displaySmall?.copyWith(color: theme.colorScheme.primary),
+              style: theme.textTheme.displaySmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
             ),
           ),
         ),
         const SizedBox(height: RatrooTheme.space4),
         Center(
-          child: Text(user.displayName ?? user.email, style: theme.textTheme.headlineSmall),
+          child: Text(
+            user.displayName ?? user.email,
+            style: theme.textTheme.headlineSmall,
+          ),
         ),
         if (user.displayName != null) ...[
           const SizedBox(height: RatrooTheme.space1),
@@ -118,13 +140,22 @@ class _SignedInState extends ConsumerState<_SignedIn> {
           child: Column(
             children: [
               ListTile(
-                leading: const Icon(AppIcons.signOut, color: RatrooTheme.confidenceLowText),
+                leading: const Icon(
+                  AppIcons.signOut,
+                  color: RatrooTheme.confidenceLowText,
+                ),
                 title: Text(
                   'Sign out',
-                  style: theme.textTheme.titleSmall?.copyWith(color: RatrooTheme.confidenceLowText),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: RatrooTheme.confidenceLowText,
+                  ),
                 ),
                 trailing: _signingOut
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : null,
                 onTap: _signingOut ? null : _signOut,
               ),

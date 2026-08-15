@@ -96,4 +96,35 @@ void main() {
       expect(result.length, 2);
     });
   });
+
+  group('displayName', () {
+    Place named(String name) => Place(id: 'x', canonicalName: name);
+
+    test('stops shouting a name the API stores in caps', () {
+      // The same stop read "Chandrakona Road" in search and "CHANDRAKONA ROAD"
+      // in Nearby, because only search wrapped its rows in titleCaseName.
+      expect(named('KOLKATA').displayName, 'Kolkata');
+      expect(named('CHANDRAKONA ROAD').displayName, 'Chandrakona Road');
+    });
+
+    test('leaves initialisms and mixed case alone', () {
+      expect(named('BB Ganguly St.').displayName, 'BB Ganguly St.');
+      expect(named('C.R.Ave').displayName, 'C.R.Ave');
+    });
+
+    test('a dotted initialism survives however long it is', () {
+      // "C.R." is four characters, so the short-token rule missed it and the
+      // Nearby list rendered "C.r. Avenue".
+      expect(named('C.R. AVENUE').displayName, 'C.R. Avenue');
+      expect(named('B.B.D. BAGH').displayName, 'B.B.D. Bagh');
+      // Not an initialism — a normal abbreviation still title-cases.
+      expect(named('ST. PAULS').displayName, 'St. Pauls');
+    });
+
+    test('canonicalName stays raw for the API and deep links', () {
+      // place-details URLs, the WBBUS timetable link and name matching all
+      // read canonicalName; title-casing it in place would break them.
+      expect(named('KOLKATA').canonicalName, 'KOLKATA');
+    });
+  });
 }

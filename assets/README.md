@@ -121,6 +121,37 @@ Exact specs, so a downloaded file works without rework.
 | Home hero 3D | `.glb` | **≤2 MB**, ≤20k tris, 1 material, Draco-compressed | "low poly bus", "city", "bus stop" |
 | Empty-state illustrations | SVG | 2-colour, themeable | Storyset "travel", "map", "location" |
 
+### Generated mode illustrations — awaiting the files
+
+Six illustrations were produced on 15 Aug 2026 and reviewed, but not yet saved
+into the repo. Exact names, because the code below reads them by path:
+
+| File | Spec | Wired into |
+|---|---|---|
+| `mode_bus.png` | 1:1, dark ground, neon edge | `ModeHero`, mode-filtered Nearby |
+| `mode_rail.png` | 1:1, purple `#7C3AED` | as above |
+| `mode_tram.png` | 1:1, pink `#DB2777` | as above |
+| `mode_ferry.png` | 1:1, teal `#0891B2` | as above |
+| `tile_map.png` | 1:1, blue on dark | "View map" cell, Home coverage grid |
+| `hero_map_pins.png` | ~1:1, transparent | Home hero — the slot this file lists as missing |
+
+**Two corrections before they are saved:**
+
+1. **The bus is the odd one out** — landscape (~3:2) on a *white* ground, where
+   the other four are square on near-black with an edge glow. In a grid beside
+   the train and tram it reads as a different product. Re-generate square, dark.
+2. **Metro and auto are missing.** Metro can wait — nothing is ingested. **Auto
+   / shared auto cannot**: those are the operator-submitted services no scraper
+   covers, which is the whole differentiator. Amber `#D97706`.
+
+**They do not replace the icon set.** At the 34px plate inside a Home grid tile
+these turn to mud; detailed raster needs ~100px+. Large format only — the small
+glyphs stay vector.
+
+**Licence:** generated, so no attribution owed. This is also what retires the
+`hero_*.jpg` provenance risk recorded above — those four have never had a
+confirmed origin.
+
 **Licence rule for anything dropped in:** CC-BY is fine — record the
 attribution in the table above *and* add it to the in-app credits before
 release. CC-BY-NC and "personal use only" are **not** usable: Ratroo is a

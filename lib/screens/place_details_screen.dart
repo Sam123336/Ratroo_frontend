@@ -45,7 +45,7 @@ class PlaceDetailsScreen extends ConsumerWidget {
     }
 
     final async = ref.watch(placeDetailsProvider(placeId!));
-    final title = async.valueOrNull?.data?.canonicalName ?? 'Stop';
+    final title = async.valueOrNull?.data?.displayName ?? 'Stop';
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -140,7 +140,7 @@ class _PlaceBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(place.canonicalName, style: theme.textTheme.headlineSmall),
+        Text(place.displayName, style: theme.textTheme.headlineSmall),
         const SizedBox(height: RatrooTheme.space2),
         Wrap(
           spacing: RatrooTheme.space2,
@@ -230,7 +230,7 @@ class _PlaceBody extends ConsumerWidget {
           TextButton.icon(
             onPressed: () => _openSite(context, place.sourceUrl!),
             icon: const Icon(AppIcons.externalLink, size: 16),
-            label: Text('${place.canonicalName} timetable on WBBUS'),
+            label: Text('${place.displayName} timetable on WBBUS'),
           )
         else
           ...withSite.map((s) => TextButton.icon(

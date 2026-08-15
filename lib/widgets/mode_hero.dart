@@ -17,77 +17,89 @@ class ModeHero extends StatelessWidget {
 
   const ModeHero({super.key, required this.mode, required this.title, this.subtitle});
 
-  static const _photos = {
-    'bus': 'assets/brand/hero_bus.jpg',
-    'rail': 'assets/brand/hero_rail.jpg',
-    'ferry': 'assets/brand/hero_ferry.jpg',
-    'tram': 'assets/brand/hero_tram.jpg',
+  /// The generated illustration per mode.
+  ///
+  /// This used to be four `hero_*.jpg` stock photographs whose origin was
+  /// never confirmed — `assets/README.md` carried that as a release blocker
+  /// for three sessions. The generated set replaces them and they are deleted.
+  /// (`hero_bus.jpg` survives, but only as `BusBanner`'s fallback when the
+  /// video cannot decode.)
+  static const _illustrations = {
+    'bus': 'assets/brand/mode_bus.png',
+    'rail': 'assets/brand/mode_rail.png',
+    'ferry': 'assets/brand/mode_ferry.png',
+    'tram': 'assets/brand/mode_tram.png',
   };
 
-  /// True when we hold a photograph for this mode. Metro has none, because it
-  /// has no data either.
-  static bool hasPhoto(String? mode) => _photos.containsKey(mode?.toLowerCase());
+  /// True when we hold artwork for this mode. Metro has none, because it has
+  /// no data either.
+  static bool hasPhoto(String? mode) =>
+      _illustrations.containsKey(mode?.toLowerCase());
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final photo = _photos[mode.toLowerCase()];
-    if (photo == null) return const SizedBox.shrink();
+    final art = _illustrations[mode.toLowerCase()];
+    if (art == null) return const SizedBox.shrink();
+    final colour = RatrooTheme.modeColor(mode);
 
-    return SizedBox(
-      // Fixed 32:14, matching the asset, so the text below never jumps once
-      // the image decodes.
+    // Words left, vehicle right, on a wash of the mode's own colour.
+    //
+    // This used to be a photograph filling the banner under a black scrim.
+    // The art is now a transparent cut-out with no scene behind it, so
+    // `cover` would crop the nose off and the scrim would darken nothing —
+    // a scrim exists to rescue white text from a bright sky, and there is no
+    // sky. The colour wash does that job and names the mode at the same time.
+    return Container(
       height: 168,
       width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Color.alphaBlend(colour.withValues(alpha: 0.30), theme.colorScheme.surface),
+            Color.alphaBlend(colour.withValues(alpha: 0.14), theme.colorScheme.surface),
+          ],
+        ),
+      ),
+      child: Row(
         children: [
-          Image.asset(
-            photo,
-            fit: BoxFit.cover,
-            semanticLabel: '$title, photograph',
-            errorBuilder: (_, _, _) => ColoredBox(color: RatrooTheme.modeColor(mode)),
-          ),
-          // Scrim, not decoration: white text over a bright sky fails contrast
-          // outright. Darkest at the bottom where the words sit.
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0x1A000000), Color(0xB3000000)],
-                stops: [0.35, 1],
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: RatrooTheme.space4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.headlineSmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: theme.textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
-          Positioned(
-            left: RatrooTheme.space4,
-            right: RatrooTheme.space4,
-            bottom: RatrooTheme.space4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.headlineSmall?.copyWith(color: Colors.white),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle!,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      // 0.9 white on the scrim clears 4.5:1; the theme's muted
-                      // body colour does not.
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
+          Padding(
+            padding: const EdgeInsets.all(RatrooTheme.space3),
+            child: Image.asset(
+              art,
+              height: 132,
+              fit: BoxFit.contain,
+              semanticLabel: '$title, illustration',
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
         ],

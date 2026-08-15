@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Finder metadata. assets/ is declared as a directory in pubspec, so a
+# .DS_Store in there ships inside the app bundle.
+.DS_Store

@@ -20,7 +20,9 @@ import '../widgets/glass_container.dart';
 import '../widgets/tilt_tap.dart';
 import '../core/app_icons.dart';
 import '../widgets/city_card.dart';
+import '../widgets/skeleton.dart';
 import '../widgets/not_serviced_yet.dart';
+import '../widgets/app_shell.dart';
 
 // Stops around wherever the user actually is, widening the search until it
 // finds some. In rural West Bengal the nearest stop can be 10 km away.
@@ -137,55 +139,6 @@ class _MovedBanner extends ConsumerWidget {
   }
 }
 
-/// Where the app believes the rider is, with a way straight to what is around
-/// them. Only rendered when a nearby stop actually named the area — an
-/// unlabelled pill claiming a location we guessed would be worse than none.
-class _LocationPill extends StatelessWidget {
-  final String area;
-
-  const _LocationPill({required this.area});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(RatrooTheme.radiusPill),
-      onTap: () => context.push('/nearby'),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: RatrooTheme.space4,
-          vertical: RatrooTheme.space2,
-        ),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(RatrooTheme.radiusPill),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              AppIcons.myLocation,
-              size: 16,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(width: RatrooTheme.space2),
-            Text(
-              area,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: RatrooTheme.space1),
-            Icon(AppIcons.chevron, size: 14, color: theme.colorScheme.primary),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(delay: 180.ms).scale(begin: const Offset(0.94, 0.94));
-  }
-}
-
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -194,6 +147,12 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       body: AuroraBackdrop(
         child: SafeArea(
+          // bottom: false — the floating bar is cleared by AppShell.contentInset at
+          // the end of the scroll, not here. Under `extendBody: true` Flutter
+          // already adds the bar's height to this body's MediaQuery, so a
+          // bottom-safe SafeArea reserves it a second time and leaves a gap the
+          // size of the bar below the content.
+          bottom: false,
           child: RefreshIndicator(
             onRefresh: () async {
               // Location first: pulling to refresh re-read the stops but kept the
@@ -224,18 +183,14 @@ class HomeScreen extends ConsumerWidget {
                 _buildNearbySection(context, ref),
                 const SizedBox(height: RatrooTheme.space8),
                 _buildSavedRoutes(context, ref),
-                // Clears the floating navigation bar, which now sits over the
-                // list instead of below it.
-                const SizedBox(height: 96),
+                // Clears the floating navigation bar the shell paints over
+                // this list.
+                const SizedBox(height: AppShell.contentInset),
               ],
             ),
           ),
         ),
       ),
-      // Floats over the list rather than sitting in a slab at the bottom
-      // edge. The list reserves 96px at its end so nothing hides under it.
-      extendBody: true,
-      bottomNavigationBar: _buildBottomNav(context),
     );
   }
 
@@ -265,7 +220,6 @@ class HomeScreen extends ConsumerWidget {
 
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final area = ref.watch(homeAreaProvider);
     final drift = ref.watch(locationDriftProvider);
     // Null until sign-in, and null for a signed-in account with no name set.
     // Either way the greeting simply stops early rather than guessing.
@@ -294,108 +248,35 @@ class HomeScreen extends ConsumerWidget {
           ],
         ).animate().fadeIn().slideY(begin: -0.2, end: 0),
         const SizedBox(height: RatrooTheme.space4),
-        // The question sits on frosted glass over the moving scene rather than
-        // beside it. Dark text straight onto the animation would be illegible
-        // wherever the bus or a tree passed behind it; the panel guarantees
-        // contrast whatever frame is showing, and still lets the scene through.
-        // Compact hero: words left, bus right.
+        // The banner runs the full width, above the question, as its own
+        // rounded card.
         //
-        // A Row, not a Stack with Positioned children. The stacked version put
-        // the video on the wrong side and over the text, and each attempt to
-        // correct it was a guess at how the constraints resolved. A Row cannot
-        // get the order wrong, and the text can never be overlapped because
-        // the two occupy different space.
-        SizedBox(
-          height: 176,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      // No hardcoded break: the column is narrower now, and a
-                      // fixed newline on top of natural wrapping produced four
-                      // ragged lines.
-                      'Where would you like to go today?',
-                      style: GoogleFonts.outfit(
-                        fontSize: 26,
-                        height: 1.15,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.5,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: RatrooTheme.space2),
-                    Text(
-                      _subtitle(ref),
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (area != null) ...[
-                      const SizedBox(height: RatrooTheme.space3),
-                      _LocationPill(area: area),
-                    ],
-                  ],
-                ),
-              ),
-              // Slides back under the words and dissolves into the page
-              // instead of ending on a hard edge. Translate, not margin, so
-              // the Row's layout — and therefore the left/right order — is
-              // untouched; only the paint moves.
-              // Slot the Row lays out; the video paints wider than it and
-              // both fades happen *inside* that wider box.
-              //
-              // The masks used to wrap the outer box, so the gradient was
-              // measured against 178px while the video painted 232 — the last
-              // 54px got no fade and ended on a hard rectangle edge.
-              SizedBox(
-                width: 178,
-                height: 176,
-                child: OverflowBox(
-                  alignment: Alignment.centerLeft,
-                  maxWidth: 232,
-                  child: Transform.translate(
-                    offset: const Offset(-30, 0),
-                    child: ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.white,
-                          Colors.white,
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, 0.16, 0.84, 1.0],
-                      ).createShader(bounds),
-                      blendMode: BlendMode.dstIn,
-                      child: ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [Colors.transparent, Colors.white],
-                          stops: [0.0, 0.42],
-                        ).createShader(bounds),
-                        blendMode: BlendMode.dstIn,
-                        child: const SizedBox(
-                          width: 232,
-                          height: 176,
-                          child: BusBanner(
-                            height: 176,
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        // It used to sit beside the headline in a 178px slot, painted through
+        // an OverflowBox 54px wider than that slot so two ShaderMasks could
+        // fade its edges. The comment above it said the text "can never be
+        // overlapped because the two occupy different space" — but an
+        // OverflowBox is precisely how a child escapes its space, so the video
+        // was painting over the subtitle, which read "Bus, ferry, rail and t"
+        // and stopped. The fades did not survive the video texture either, so
+        // the cost bought a hard rectangle with the copy underneath it.
+        //
+        // Full width and stacked, the animation gets the room this widget's
+        // own documentation asks for, and the headline gets all 327px of a
+        // small phone instead of wrapping to four ragged lines in 180.
+        const BusBanner(height: 132),
+        const SizedBox(height: RatrooTheme.space6),
+        Text(
+          'Where would you like to go today?',
+          // displaySmall, not an inline Outfit: the type scale already defines
+          // this size, weight and tracking.
+          style: theme.textTheme.displaySmall,
+        ),
+        const SizedBox(height: RatrooTheme.space2),
+        Text(
+          _subtitle(ref),
+          style: theme.textTheme.bodyMedium,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
         if (drift != null) ...[
           const SizedBox(height: RatrooTheme.space4),
@@ -457,26 +338,14 @@ class HomeScreen extends ConsumerWidget {
     final nearbyAsync = ref.watch(homeNearbyStationsProvider);
     final theme = Theme.of(context);
 
+    // No section heading of its own. This block used to open with "Ready to
+    // travel?" and a "See Map" button, and then CityCard — the only thing it
+    // renders in the normal case — opened with "Travel across West Bengal"
+    // and a "View map" button directly underneath. Two headings and two map
+    // links with nothing between them. The card names its own section.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Ready to travel?', style: theme.textTheme.headlineSmall),
-            TextButton(
-              onPressed: () => context.push('/nearby'),
-              child: Text(
-                'See Map',
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
         nearbyAsync.when(
           data: (response) {
             final result = response.data;
@@ -547,10 +416,7 @@ class HomeScreen extends ConsumerWidget {
               ],
             );
           },
-          loading: () => Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(4, (index) => _buildShimmerCircle(context)),
-          ),
+          loading: () => const CityCardSkeleton(),
           error: (err, stack) => _buildErrorState(context, err.toString()),
         ),
       ],
@@ -603,7 +469,7 @@ class HomeScreen extends ConsumerWidget {
     // These were decoration — no tap handler at all. Each now opens Nearby
     // filtered to that mode.
     return InkWell(
-      onTap: () => context.push('/nearby?mode=${mode.toUpperCase()}'),
+      onTap: () => context.go('/nearby?mode=${mode.toUpperCase()}'),
       borderRadius: BorderRadius.circular(RatrooTheme.radiusMd),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -626,41 +492,6 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildShimmerCircle(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      children: [
-        Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-            )
-            .animate(onPlay: (controller) => controller.repeat())
-            .shimmer(
-              duration: 1200.ms,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-            ),
-        const SizedBox(height: 8),
-        Container(
-              width: 40,
-              height: 12,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-            )
-            .animate(onPlay: (controller) => controller.repeat())
-            .shimmer(
-              duration: 1200.ms,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-            ),
-      ],
     );
   }
 
@@ -694,9 +525,9 @@ class HomeScreen extends ConsumerWidget {
               if (answers.isNotEmpty) return const SizedBox.shrink();
               return _buildEmptyState(
                 context,
-                icon: AppIcons.bookmark,
-                message:
-                    'Nothing saved yet. Ask Ratroo a question and keep the answer.',
+                icon: AppIcons.assistant,
+                message: 'Ask Ratroo a question and keep the answer.',
+                onTap: () => context.go('/assistant'),
               );
             }
             return Column(
@@ -773,30 +604,12 @@ class HomeScreen extends ConsumerWidget {
               }).toList(),
             );
           },
-          loading: () => Column(
-            children: List.generate(
-              2,
-              (index) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child:
-                    Container(
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.1,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        )
-                        .animate(onPlay: (controller) => controller.repeat())
-                        .shimmer(
-                          duration: 1200.ms,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.2,
-                          ),
-                        ),
-              ),
-            ),
+          // The shared skeleton, not two hand-drawn 80px boxes: these rows
+          // are the app's standard stop/route shape and the placeholder should
+          // stay tied to it.
+          loading: () => const SizedBox(
+            height: 176,
+            child: SkeletonList(count: 2, padding: EdgeInsets.zero),
           ),
           error: (err, stack) => _buildErrorState(context, err.toString()),
         ),
@@ -804,38 +617,38 @@ class HomeScreen extends ConsumerWidget {
     ).animate().fadeIn(delay: 500.ms);
   }
 
+  /// An inline "nothing here" for one section of a scrolling page.
+  ///
+  /// Not [StatusView], which centres itself in a whole screen: this sits in a
+  /// column between two other sections. It was a 24px-padded box around a 48px
+  /// glyph, which made the absence of saved journeys the tallest thing on the
+  /// home screen. A row states it and moves on.
+  ///
+  /// [onTap] is required when the message names an action — "ask Ratroo a
+  /// question" printed inside a dead box is an instruction the screen refuses
+  /// to follow.
   Widget _buildEmptyState(
     BuildContext context, {
     required IconData icon,
     required String message,
+    VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.45);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(RatrooTheme.radiusMd),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: RatrooTheme.space4),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: muted),
+            const SizedBox(width: RatrooTheme.space3),
+            Expanded(child: Text(message, style: theme.textTheme.bodyMedium)),
+            if (onTap != null) Icon(AppIcons.chevron, size: 16, color: muted),
+          ],
         ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            size: 48,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: GoogleFonts.inter(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
       ),
     );
   }
@@ -864,89 +677,7 @@ class HomeScreen extends ConsumerWidget {
       ),
     );
   }
-
-  Widget _buildBottomNav(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        RatrooTheme.space4,
-        0,
-        RatrooTheme.space4,
-        RatrooTheme.space4,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(RatrooTheme.radiusXl),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(RatrooTheme.radiusXl),
-            border: Border.all(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.10),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: _navigationBar(context, theme),
-        ),
-      ),
-    );
-  }
-
-  Widget _navigationBar(BuildContext context, ThemeData theme) {
-    return NavigationBar(
-      elevation: 0,
-      backgroundColor: theme.colorScheme.surface,
-      height: 68,
-      indicatorColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-      selectedIndex: 0,
-      onDestinationSelected: (index) {
-        // Search is not a tab: the hero search bar on this screen is the way
-        // in, and a tab repeating it was the same duplication as the action
-        // card that used to sit above the fold.
-        if (index == 1) context.push('/journey-planner');
-        if (index == 2) context.push('/nearby');
-        if (index == 3) context.push('/assistant');
-        if (index == 4) context.push('/profile');
-      },
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(AppIcons.home),
-          selectedIcon: Icon(AppIcons.homeSelected),
-          label: 'Home',
-        ),
-        NavigationDestination(
-          icon: Icon(AppIcons.alternatives),
-          selectedIcon: Icon(AppIcons.alternativesSelected),
-          label: 'Plan',
-        ),
-        // Was a bookmark, which is a different promise: this tab shows what is
-        // around the rider now, not what they saved.
-        NavigationDestination(
-          icon: Icon(AppIcons.nearMe),
-          selectedIcon: Icon(AppIcons.nearMeSelected),
-          label: 'Nearby',
-        ),
-        NavigationDestination(
-          icon: Icon(AppIcons.assistant),
-          selectedIcon: Icon(AppIcons.assistant),
-          label: 'Ask',
-        ),
-        NavigationDestination(
-          icon: Icon(AppIcons.user),
-          selectedIcon: Icon(AppIcons.userSelected),
-          label: 'Profile',
-        ),
-      ],
-    );
-  }
 }
-
-/// One Quick Access square: icon over a two-line label, whole tile tappable.
 
 /// Assistant answers the rider kept, newest first.
 class _SavedAnswers extends ConsumerWidget {
@@ -1095,7 +826,7 @@ class _AccountButton extends StatelessWidget {
       label: 'Your account',
       child: InkWell(
         borderRadius: BorderRadius.circular(RatrooTheme.radiusPill),
-        onTap: () => context.push('/profile'),
+        onTap: () => context.go('/profile'),
         child: Container(
           width: 42,
           height: 42,

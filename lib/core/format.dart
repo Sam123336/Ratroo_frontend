@@ -56,9 +56,22 @@ String titleCaseName(String raw) {
       .split(RegExp(r'(\s+)'))
       .map((word) {
         if (word.trim().isEmpty) return word;
-        // Keep initialisms and anything already mixed-case as the source had
-        // it: "C.R.Ave" and "BB" must survive untouched.
-        if (word.length <= 3 && word == word.toUpperCase()) return word;
+        // A dotted initialism, whatever its length: "C.R.", "B.B.D.".
+        //
+        // The length rule below alone was not enough — this comment has always
+        // claimed "C.R. Avenue" was handled, but "C.R." is four characters, so
+        // it fell through and the app rendered "C.r. Avenue". Only visible
+        // once every screen started title-casing; before that, Nearby showed
+        // the raw "C.R. AVENUE" and hid the bug.
+        if (RegExp(r'^([A-Za-z]\.)+$').hasMatch(word)) return word;
+        // Keep short *dotless* initialisms — "BB", "ESI". A short token with a
+        // dot is an abbreviation, not an initialism, so "ST." title-cases to
+        // "St." rather than staying shouted.
+        if (word.length <= 3 &&
+            !word.contains('.') &&
+            word == word.toUpperCase()) {
+          return word;
+        }
         if (word != word.toUpperCase()) return word;
         return word[0].toUpperCase() + word.substring(1).toLowerCase();
       })

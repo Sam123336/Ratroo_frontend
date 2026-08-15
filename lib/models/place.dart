@@ -1,3 +1,5 @@
+import '../core/format.dart';
+
 /// One scheduled departure from a stop.
 class Departure {
   /// "HH:MM" as published by the operator.
@@ -158,6 +160,17 @@ class Place {
     this.district,
     this.state,
   });
+
+  /// [canonicalName] as a rider should read it: "KOLKATA" becomes "Kolkata",
+  /// while "C.R.Ave" and "BB Ganguly St." survive untouched.
+  ///
+  /// A getter on the model rather than a `titleCaseName(...)` at each call
+  /// site. Search already wrapped its rows and no other screen did, so the
+  /// same stop was "Chandrakona Road" in one list and "CHANDRAKONA ROAD" in
+  /// the next. Every screen that shows a name to a person reads this;
+  /// [canonicalName] stays raw for the things that must match the API — query
+  /// strings, deep links and the WBBUS timetable URL.
+  String get displayName => titleCaseName(canonicalName);
 
   /// The area to name in "Where to, ___?".
   ///

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:go_router/go_router.dart';
 import '../providers/api_providers.dart';
 import '../models/journey.dart';
 import '../widgets/journey_card.dart';
@@ -9,6 +8,8 @@ import '../widgets/skeleton.dart';
 import '../core/transit_icons.dart';
 import '../models/place.dart';
 import '../core/theme.dart';
+import '../widgets/app_shell.dart';
+
 import '../core/api_client.dart';
 import '../widgets/glass_container.dart';
 import '../core/app_icons.dart';
@@ -121,7 +122,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
   void _prefillFrom(Place stop) {
     if (_prefilled || _fromController.text.isNotEmpty) return;
     _prefilled = true;
-    _fromController.text = stop.canonicalName;
+    _fromController.text = stop.displayName;
     ref.read(selectedFromPlaceProvider.notifier).state = stop;
   }
 
@@ -162,13 +163,9 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
     final showJourneyResults = selectedFrom != null && selectedTo != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Journey Planner'),
-        leading: IconButton(
-          icon: const Icon(AppIcons.back),
-          onPressed: () => context.pop(),
-        ),
-      ),
+      // A tab root, so no back arrow: there is nothing behind it to go back
+      // to, and the navigation bar is how you leave.
+      appBar: AppBar(title: const Text('Plan a journey')),
       body: Column(
         children: [
           // Search input box
@@ -330,7 +327,12 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
             );
 
             return ListView(
-              padding: const EdgeInsets.all(RatrooTheme.space4),
+              padding: const EdgeInsets.fromLTRB(
+                RatrooTheme.space4,
+                RatrooTheme.space4,
+                RatrooTheme.space4,
+                AppShell.contentInset,
+              ),
               children: [
                 Row(
                   children: [
@@ -342,7 +344,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                     const SizedBox(width: RatrooTheme.space2),
                     Expanded(
                       child: Text(
-                        'Nearest stop: ${stop.canonicalName}'
+                        'Nearest stop: ${stop.displayName}'
                         '${stop.distanceLabel == null ? "" : " · ${stop.distanceLabel}"}',
                         style: theme.textTheme.titleSmall,
                       ),
@@ -368,7 +370,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Where you can go from ${stop.canonicalName}',
+          'Where you can go from ${stop.displayName}',
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: RatrooTheme.space1),
@@ -393,7 +395,7 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
               data: (destinations) {
                 if (destinations.isEmpty) {
                   return Text(
-                    'No services from ${stop.canonicalName} are mapped yet, '
+                    'No services from ${stop.displayName} are mapped yet, '
                     'so type a destination instead.',
                     style: theme.textTheme.bodyMedium,
                   );
@@ -451,7 +453,12 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
       // actually picked from the list.
       if (field == 'to' && origin != null && origin.id.isNotEmpty) {
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(RatrooTheme.space4),
+          padding: const EdgeInsets.fromLTRB(
+            RatrooTheme.space4,
+            RatrooTheme.space4,
+            RatrooTheme.space4,
+            AppShell.contentInset,
+          ),
           child: _reachableSection(origin, theme),
         );
       }
@@ -487,18 +494,18 @@ class _JourneyPlannerScreenState extends ConsumerState<JourneyPlannerScreen> {
                   context,
                 ).colorScheme.primary.withValues(alpha: 0.7),
               ),
-              title: Text(place.canonicalName),
+              title: Text(place.displayName),
               subtitle: Text(place.readableType),
               onTap: () {
                 if (field == 'from') {
-                  _fromController.text = place.canonicalName;
+                  _fromController.text = place.displayName;
                   ref.read(selectedFromPlaceProvider.notifier).state = place;
                   _fromFocus.unfocus();
                   if (ref.read(selectedToPlaceProvider) == null) {
                     _toFocus.requestFocus();
                   }
                 } else {
-                  _toController.text = place.canonicalName;
+                  _toController.text = place.displayName;
                   ref.read(selectedToPlaceProvider.notifier).state = place;
                   _toFocus.unfocus();
                 }

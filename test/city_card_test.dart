@@ -48,14 +48,17 @@ void main() {
   testWidgets('lists the busiest mode first', (tester) async {
     await _pump(tester, city: 'Kolkata');
 
-    // Left to right now the modes are a horizontal strip, not a list.
-    final bus = tester.getTopLeft(find.text('Bus')).dx;
-    final ferry = tester.getTopLeft(find.text('Ferry')).dx;
-    final tram = tester.getTopLeft(find.text('Tram')).dx;
+    // A two-column grid, so "before" is reading order — down a row first,
+    // then left to right. Comparing x alone passed on the old single-row
+    // strip and would now call the second row's first tile "leftmost".
+    double order(String label) {
+      final at = tester.getTopLeft(find.text(label));
+      return at.dy * 1000 + at.dx;
+    }
 
     // 2,727 → 9 → 6, not alphabetical.
-    expect(bus, lessThan(ferry));
-    expect(ferry, lessThan(tram));
+    expect(order('BUS'), lessThan(order('FERRY')));
+    expect(order('FERRY'), lessThan(order('TRAM')));
   });
 
   testWidgets('a mode with no routes is left out, not shown as zero', (
@@ -64,8 +67,8 @@ void main() {
     await _pump(tester, city: 'Kolkata');
 
     // An empty row reads as a broken network rather than missing data.
-    expect(find.text('Metro'), findsNothing);
-    expect(find.text('0 routes'), findsNothing);
+    expect(find.text('METRO'), findsNothing);
+    expect(find.text('0'), findsNothing);
   });
 
   testWidgets('uses the words riders use for each mode stop', (tester) async {
@@ -118,8 +121,8 @@ void _cityTree() {
 
     // 803 here, not the 2,727 state-wide — a tram runs in Kolkata and nowhere
     // else, so state totals would tell Bardhaman it has trams.
-    expect(find.textContaining('803 routes'), findsOneWidget);
-    expect(find.textContaining('2,727 routes'), findsNothing);
+    expect(find.text('803'), findsOneWidget);
+    expect(find.text('2,727'), findsNothing);
   });
 
   testWidgets('falls back to the state where the city is unknown', (
@@ -140,6 +143,6 @@ void _cityTree() {
 
     // Bardhaman has no city row, so the state totals stand rather than
     // borrowing Kolkata's.
-    expect(find.textContaining('2,727 routes'), findsOneWidget);
+    expect(find.text('2,727'), findsOneWidget);
   });
 }

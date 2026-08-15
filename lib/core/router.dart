@@ -11,6 +11,7 @@ import '../screens/nearby_explorer_screen.dart';
 import '../screens/assistant_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/profile_screen.dart';
+import '../widgets/app_shell.dart';
 
 /// Every screen here is a drill-down from a list: a stop card opens its
 /// details, a search result opens a route. Material calls that a parent-child
@@ -49,18 +50,40 @@ Widget drillDownTransition(
   );
 }
 
+/// One branch of the tab shell. Each gets its own navigator, so a drill-down
+/// in Nearby does not disturb what Plan has half-typed.
+StatefulShellBranch _branch(String path, Widget screen) => StatefulShellBranch(
+  routes: [GoRoute(path: path, builder: (context, state) => screen)],
+);
+
 final goRouter = GoRouter(
   initialLocation: '/',
   routes: [
-    GoRoute(
-      path: '/',
-      builder: (context, state) => const HomeScreen(),
+    // The five top-level destinations. Inside the shell they switch; the
+    // navigation bar stays put and marks which one you are on.
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) =>
+          AppShell(navigationShell: navigationShell),
+      branches: [
+        _branch('/', const HomeScreen()),
+        _branch('/journey-planner', const JourneyPlannerScreen()),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/nearby',
+              builder: (context, state) =>
+                  NearbyExplorerScreen(mode: state.uri.queryParameters['mode']),
+            ),
+          ],
+        ),
+        _branch('/assistant', const AssistantScreen()),
+        _branch('/profile', const ProfileScreen()),
+      ],
     ),
-    GoRoute(
-      path: '/journey-planner',
-      pageBuilder: (context, state) =>
-          _drillDown(state.pageKey, const JourneyPlannerScreen()),
-    ),
+    // Everything below is a drill-down from one of those five. These are
+    // pushed over the shell on purpose: a route timetable or a stop's detail
+    // wants the whole screen, and the bar would only offer a way to abandon
+    // it halfway.
     GoRoute(
       path: '/route-details',
       pageBuilder: (context, state) =>
@@ -89,23 +112,8 @@ final goRouter = GoRouter(
           _drillDown(state.pageKey, const SearchScreen()),
     ),
     GoRoute(
-      path: '/nearby',
-      pageBuilder: (context, state) =>
-          _drillDown(state.pageKey, NearbyExplorerScreen(mode: state.uri.queryParameters['mode'])),
-    ),
-    GoRoute(
-      path: '/assistant',
-      pageBuilder: (context, state) =>
-          _drillDown(state.pageKey, const AssistantScreen()),
-    ),
-    GoRoute(
       path: '/auth',
       builder: (context, state) => const AuthScreen(),
-    ),
-    GoRoute(
-      path: '/profile',
-      pageBuilder: (context, state) =>
-          _drillDown(state.pageKey, const ProfileScreen()),
     ),
   ],
 );

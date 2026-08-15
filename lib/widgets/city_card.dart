@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 import '../core/app_icons.dart';
+import '../core/transit_icons.dart';
 import '../core/format.dart';
 import '../core/theme.dart';
 import '../models/coverage_summary.dart';
@@ -46,16 +48,6 @@ class CityCard extends StatelessWidget {
     'shared_auto': 'Shared auto',
   };
 
-  static const _icon = <String, IconData>{
-    'bus': AppIcons.bus,
-    'rail': AppIcons.rail,
-    'metro': AppIcons.metro,
-    'ferry': AppIcons.ferry,
-    'tram': AppIcons.tram,
-    'auto': AppIcons.auto,
-    'shared_auto': AppIcons.sharedAuto,
-  };
-
   /// The city the rider is standing in, when we hold counts for it.
   ///
   /// Matched on name because that is all the two sides share — the coverage
@@ -93,39 +85,152 @@ class CityCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // No "View map" button beside the heading: the grid's last cell is
+        // that action. A long place name wrapped to two lines and collided
+        // with the button, and it was the same link twice either way.
         Padding(
           padding: const EdgeInsets.only(bottom: RatrooTheme.space3),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Travel across ${local?.city ?? city ?? coverage.region ?? 'your area'}',
-                  style: theme.textTheme.headlineSmall,
-                ),
-              ),
-              TextButton(
-                onPressed: () => context.push('/nearby'),
-                child: const Text('View map'),
-              ),
-            ],
+          child: Text(
+            'Travel across ${local?.city ?? city ?? coverage.region ?? 'your area'}',
+            style: theme.textTheme.headlineSmall,
           ),
         ),
-        // Side by side rather than stacked: four modes read as a set of
-        // choices this way, and each is one tap. The vertical list made the
-        // card the tallest thing on the screen for four numbers.
-        SizedBox(
-          height: 172,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            padding: EdgeInsets.zero,
-            itemCount: modes.length,
-            separatorBuilder: (_, _) =>
-                const SizedBox(width: RatrooTheme.space3),
-            itemBuilder: (context, index) => _ModeRow(mode: modes[index]),
-          ),
+        // A two-column grid, not a horizontal strip.
+        //
+        // The strip clipped its third tile mid-word at the viewport edge, so
+        // "8 routes / 25 stations" read as "8 route… / 25 stati…" — a
+        // truncation that looks like a rendering fault rather than an
+        // invitation to scroll. A grid shows every mode at once, which is
+        // four to six tiles in practice, and each gets twice the width.
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          mainAxisSpacing: RatrooTheme.space3,
+          crossAxisSpacing: RatrooTheme.space3,
+          // A fixed tile height, not an aspect ratio. With a ratio the tile
+          // grows with the column, so on a tablet or in landscape a 400px-wide
+          // cell became a 330px-tall one — a stat tile the height of a card.
+          mainAxisExtent: 144,
+          children: [
+            for (final mode in modes) _ModeRow(mode: mode),
+            // The odd-one-out slot. With an odd number of modes the grid
+            // leaves a hole, and a map link is a better use of it than air.
+            const _ViewMapTile(),
+          ],
         ),
       ],
+    );
+  }
+}
+
+/// Fills the grid's trailing cell with the map rather than a gap.
+///
+/// Outlined and unfilled, where the tiles beside it are filled: it is an
+/// action, not a statistic, and drawing it the same way would imply it
+/// carries a count too. (Stitch's mock dashes this border. A dash needs a
+/// CustomPainter or a package for one tile, and the absent fill already
+/// makes the distinction.)
+class _ViewMapTile extends StatelessWidget {
+  const _ViewMapTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.5);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
+      onTap: () => context.go('/nearby'),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
+          border: Border.all(color: theme.colorScheme.outline),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // The illustration when it is present, the glyph until then.
+            //
+            // `errorBuilder` is the whole mechanism: the asset is declared in
+            // pubspec via the `assets/brand/` directory entry, so dropping the
+            // file in is the only step — no code change, no pubspec edit. Until
+            // it exists, Flutter raises and this falls back rather than
+            // showing a broken-image box.
+            Image.asset(
+              'assets/brand/tile_map.png',
+              height: 44,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, _, _) => Icon(
+                AppIcons.map,
+                size: 24,
+                color: muted,
+              ),
+            ),
+            const SizedBox(height: RatrooTheme.space2),
+            Text(
+              'View map',
+              style: theme.textTheme.titleSmall?.copyWith(color: muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The card's own loading state, drawn from the card's own widgets.
+///
+/// Home used to draw four grey circles here, left over from when this section
+/// was a row of photo circles. The section became a strip of 132×172 cards and
+/// the placeholder never followed, so the screen resolved from four circles
+/// into three rectangles. `skeletonizer` is in the project precisely so a
+/// placeholder cannot drift from the layout it stands in for — this feeds it
+/// the real [_ModeRow] and lets it draw the bones.
+class CityCardSkeleton extends StatelessWidget {
+  const CityCardSkeleton({super.key});
+
+  // Counts are never read: skeletonizer paints bones over the text, and the
+  // digits only exist to give those bones the right line box.
+  static const _placeholders = [
+    ModeCoverage(mode: 'bus', routeCount: 1000, stopCount: 1000),
+    ModeCoverage(mode: 'rail', routeCount: 100, stopCount: 100),
+    ModeCoverage(mode: 'ferry', routeCount: 10, stopCount: 10),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Skeletonizer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: RatrooTheme.space3),
+            child: Text(
+              'Travel across your area',
+              style: theme.textTheme.headlineSmall,
+            ),
+          ),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            mainAxisSpacing: RatrooTheme.space3,
+            crossAxisSpacing: RatrooTheme.space3,
+            // A fixed tile height, not an aspect ratio. With a ratio the tile
+          // grows with the column, so on a tablet or in landscape a 400px-wide
+          // cell became a 330px-tall one — a stat tile the height of a card.
+          mainAxisExtent: 144,
+            children: [
+              for (final mode in _placeholders) _ModeRow(mode: mode),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -152,74 +257,63 @@ class _ModeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colour = RatrooTheme.modeColor(mode.mode);
+    final label = CityCard._label[mode.mode] ?? mode.mode;
 
+    // The figure leads.
+    //
+    // The tile used to be a 26px line glyph pinned top-left, a chevron
+    // top-right, and the text at the bottom — with the middle third empty.
+    // What a rider scans for is "how much bus is there", so the count is set
+    // at display size and everything else supports it.
     return InkWell(
       borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
-      onTap: () => context.push('/nearby?mode=${mode.mode}'),
+      onTap: () => context.go('/nearby?mode=${mode.mode}'),
       child: Container(
-        width: 132,
         padding: const EdgeInsets.all(RatrooTheme.space4),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: theme.colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(RatrooTheme.radiusLg),
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
+          border: Border.all(color: theme.colorScheme.outline),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               children: [
-                Icon(CityCard._icon[mode.mode], size: 26, color: colour),
+                // The shared avatar, so the plate here and the circle in a
+                // Nearby row can never drift. 44 rather than 34: the mode
+                // illustrations are detailed, and ten more pixels is the
+                // difference between a vehicle and a smudge.
+                ModeAvatar.forMode(mode.mode, size: 44, rounded: true),
                 const Spacer(),
-                Icon(
-                  AppIcons.chevron,
-                  size: 15,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.28),
+                Text(
+                  label.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(color: colour),
                 ),
               ],
             ),
-            const SizedBox(height: RatrooTheme.space3),
+            const Spacer(),
+            // Mono, because these line up in a grid and must not jitter as
+            // the counts change between regions.
             Text(
-              CityCard._label[mode.mode] ?? mode.mode,
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 2),
-            Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: groupedNumber(mode.routeCount),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colour,
-                      fontWeight: FontWeight.w700,
-                      // Tabular so the figures line up across the strip.
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  TextSpan(
-                    text: ' ${mode.routeCount == 1 ? 'route' : 'routes'}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
+              groupedNumber(mode.routeCount),
+              style: RatrooTheme.mono(
+                size: 27,
+                weight: FontWeight.w700,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: -1,
               ),
             ),
-            if (mode.stopCount > 0)
-              Text(
-                '${groupedNumber(mode.stopCount)} '
-                '${_stopNoun[mode.mode] ?? 'stops'}',
-                style: theme.textTheme.bodySmall,
-              ),
+            const SizedBox(height: 1),
+            Text(
+              '${mode.routeCount == 1 ? 'route' : 'routes'}'
+              '${mode.stopCount > 0 ? ' · ${groupedNumber(mode.stopCount)} '
+                  '${_stopNoun[mode.mode] ?? 'stops'}' : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            ),
           ],
         ),
       ),

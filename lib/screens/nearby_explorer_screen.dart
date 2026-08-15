@@ -9,6 +9,7 @@ import '../core/location_service.dart';
 import '../models/place.dart';
 import '../core/api_client.dart';
 import '../core/theme.dart';
+import '../widgets/app_shell.dart';
 import '../core/transit_icons.dart';
 import '../providers/api_providers.dart';
 import '../services/nearby_service.dart';
@@ -174,9 +175,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.mode == null
-              ? 'Nearby Explorer'
-              : 'Nearby ${_modeLabel(widget.mode!)}',
+          widget.mode == null ? 'Nearby' : 'Nearby ${_modeLabel(widget.mode!)}',
         ),
         actions: [
           IconButton(
@@ -191,6 +190,23 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
       ),
       body: nearbyPlacesAsync.when(
         data: (apiResponse) {
+          // A request that failed is not an area with no stops.
+          //
+          // Only the thrown-error path reached the error state; a response
+          // carrying success:false fell straight through to the empty state
+          // and rendered "No stops within 30 km" — the 30 km coming from the
+          // radius label's own default, since there was no result to read it
+          // from. The server had 26 stops at those coordinates the whole time.
+          if (!apiResponse.success) {
+            return StatusView(
+              kind: StatusKind.error,
+              message: 'Could not load nearby stops.',
+              detail: apiResponse.error,
+              actionLabel: 'Try again',
+              onAction: () => ref.invalidate(nearbyPlacesProvider(widget.mode)),
+            );
+          }
+
           final result = apiResponse.data;
           final places = _applyModeFilter(result?.places ?? const []);
           final body = places.isEmpty
@@ -316,7 +332,10 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
     final hero = mode != null && ModeHero.hasPhoto(mode);
 
     return ListView.builder(
-      padding: EdgeInsets.only(bottom: 16, top: hero ? 0 : 16),
+      padding: EdgeInsets.only(
+        bottom: AppShell.contentInset,
+        top: hero ? 0 : 16,
+      ),
       itemCount: places.length + (hero ? 1 : 0),
       itemBuilder: (context, rawIndex) {
         if (hero && rawIndex == 0) {
@@ -352,7 +371,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            place.canonicalName,
+                            place.displayName,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold),
                             maxLines: 1,
@@ -376,7 +395,7 @@ class _NearbyExplorerScreenState extends ConsumerState<NearbyExplorerScreen> {
                             const SizedBox(height: 6),
                             _RouteBadges(
                               routes: place.routes,
-                              stopName: place.canonicalName,
+                              stopName: place.displayName,
                             ),
                           ],
                         ],

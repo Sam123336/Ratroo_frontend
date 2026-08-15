@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/format.dart';
 import '../core/theme.dart';
+import '../widgets/app_shell.dart';
+
 import '../providers/api_providers.dart';
 import '../services/chat_store.dart';
 import '../services/saved_answers_service.dart';
@@ -218,6 +220,12 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         ],
       ),
       body: SafeArea(
+        // bottom: false — the floating bar is cleared by AppShell.contentInset at
+        // the end of the scroll, not here. Under `extendBody: true` Flutter
+        // already adds the bar's height to this body's MediaQuery, so a
+        // bottom-safe SafeArea reserves it a second time and leaves a gap the
+        // size of the bar below the content.
+        bottom: false,
         child: Column(
           children: [
             Expanded(
@@ -400,21 +408,31 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     );
   }
 
+  /// The composer floats above the navigation bar rather than docking to the
+  /// bottom edge.
+  ///
+  /// It used to be a full-bleed panel with a top hairline, which was right
+  /// when it sat on the bottom edge. Once the bar started floating over the
+  /// content, clearing it meant 100px of bottom padding — and the panel's own
+  /// surface colour filled all of it, so the screen ended in a tall empty
+  /// slab with the input stranded at its top. A floating pill clears the bar
+  /// the same way and matches the language of the thing it sits above.
   Widget _buildComposer(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(
+      margin: const EdgeInsets.fromLTRB(
         RatrooTheme.space4,
         RatrooTheme.space2,
         RatrooTheme.space4,
-        RatrooTheme.space4,
+        AppShell.contentInset,
       ),
+      padding: const EdgeInsets.all(RatrooTheme.space2),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
-          ),
+        borderRadius: BorderRadius.circular(RatrooTheme.radiusXl),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
         ),
+        boxShadow: RatrooTheme.cardShadow(theme.brightness),
       ),
       child: Row(
         children: [

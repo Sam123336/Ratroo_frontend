@@ -28,7 +28,13 @@ class BusBanner extends StatefulWidget {
   const BusBanner({super.key, this.height = 150, this.borderRadius});
 
   static const _asset = 'assets/brand/bus_animation.mp4';
-  static const _fallback = 'assets/brand/hero_bus.jpg';
+  /// Shown while the video loads, if decoding fails, and whenever the rider
+  /// has asked the system to reduce motion.
+  ///
+  /// Was `hero_bus.jpg`, a stock photograph with no confirmed origin. The
+  /// generated cut-out replaces it — and unlike the photo it is drawn
+  /// `contain` on a tinted ground, because it has no background of its own.
+  static const _fallback = 'assets/brand/mode_bus.png';
 
   @override
   State<BusBanner> createState() => _BusBannerState();
@@ -111,7 +117,19 @@ class _BusBannerState extends State<BusBanner> {
                       child: VideoPlayer(controller),
                     ),
                   )
-                : Image.asset(BusBanner._fallback, fit: BoxFit.cover),
+                : ColoredBox(
+                    color: RatrooTheme.modeColor('bus').withValues(alpha: 0.16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(RatrooTheme.space3),
+                      child: Image.asset(
+                        BusBanner._fallback,
+                        fit: BoxFit.contain,
+                        // The asset could go missing too; a tinted panel is a
+                        // better last resort than a broken-image box.
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
           ),
         ),
       ),

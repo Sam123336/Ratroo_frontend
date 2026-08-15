@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_icons.dart';
+import 'theme.dart';
 
 /// Icon for a stop category, as `/v1/stops/nearby` and `/v1/places/:id` report
 /// it: `<routeType>_STOP` — BUS_STOP, RAIL_STOP, FERRY_STOP, TRAM_STOP.
@@ -12,54 +13,132 @@ import 'app_icons.dart';
 /// rider could act on, repeated identically down every list, and shipped
 /// megabytes to say what a 20px icon says better.
 class ModeAvatar extends StatelessWidget {
+  /// API stop category — `BUS_STOP`, `FERRY_GHAT`, … Also accepts a bare mode
+  /// key (`bus`, `rail`) via [ModeAvatar.forMode].
   final String? category;
   final double size;
 
-  const ModeAvatar({super.key, required this.category, this.size = 48});
+  /// Rounded square instead of a circle, for the coverage grid's plate.
+  final bool rounded;
+
+  const ModeAvatar({
+    super.key,
+    required this.category,
+    this.size = 48,
+    this.rounded = false,
+  });
+
+  /// When the caller holds the bare mode key rather than the API's
+  /// `<TYPE>_STOP` category — the coverage grid, which reads `byMode`.
+  const ModeAvatar.forMode(
+    String mode, {
+    super.key,
+    this.size = 48,
+    this.rounded = false,
+  }) : category = mode;
+
+  /// [category] may arrive as either spelling, so normalise both.
+  String? get _mode {
+    final fromCategory = modeKey(category);
+    if (fromCategory != null) return fromCategory;
+    final bare = category?.toLowerCase();
+    return RatrooTheme.modeColors.containsKey(bare) ? bare : null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // The mode's own colour, not the brand's.
+    //
+    // This drew the right glyph per mode and then painted every one of them
+    // `colorScheme.primary` — so a tram stop, a ferry ghat and a bus stop were
+    // the same colour, and the mode was carried by a 24px silhouette alone.
+    // Once the brand went saffron it got worse: every list row matched the
+    // selected tab and the primary button, so a *stop* looked like an *action*.
+    final mode = _mode;
+    final colour = RatrooTheme.modeColor(mode);
 
-    final glyph = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(
-        modeIcon(category),
-        color: theme.colorScheme.primary,
-        size: size * 0.5,
-      ),
+    final glyph = Center(
+      child: Icon(modeIconFor(mode), color: colour, size: size * 0.5),
     );
 
-    return glyph;
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(rounded ? size * 0.28 : size),
+      ),
+      // The generated illustration when present, the tinted glyph until then.
+      //
+      // These are detailed night scenes, so they only read at the sizes this
+      // widget is used at — 44px in the coverage grid, 48px in a list row.
+      // `errorBuilder` means dropping the PNG into assets/brand/ is the only
+      // step; with no file this is exactly the glyph that shipped before.
+      child: mode == null
+          ? glyph
+          : Padding(
+              // The art is a transparent cut-out, so `contain` shows the whole
+              // vehicle and the plate's mode tint reads through behind it.
+              // `cover` is for full-bleed scenes and would crop the nose off.
+              padding: EdgeInsets.all(size * 0.08),
+              child: Image.asset(
+                'assets/brand/mode_$mode.png',
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (_, _, _) => glyph,
+              ),
+            ),
+    );
   }
 }
 
-IconData modeIcon(String? category) {
+/// The `modeColors` key for a stop category.
+///
+/// The API sends `<routeType>_STOP`; [RatrooTheme.modeColor] is keyed on the
+/// bare route type. Anything unrecognised returns null so the colour falls
+/// back to neutral rather than claiming a mode.
+String? modeKey(String? category) {
   switch (category) {
     case 'RAIL_STOP':
     case 'RAIL_STATION':
-      return AppIcons.rail;
+      return 'rail';
     case 'FERRY_STOP':
     case 'FERRY_GHAT':
-      return AppIcons.ferry;
+      return 'ferry';
     case 'TRAM_STOP':
-      return AppIcons.tram;
+      return 'tram';
     case 'METRO_STOP':
     case 'METRO_STATION':
-      return AppIcons.metro;
+      return 'metro';
     case 'AUTO_STAND':
-      return AppIcons.auto;
+      return 'auto';
     case 'SHARED_AUTO_STAND':
-      return AppIcons.sharedAuto;
+      return 'shared_auto';
     case 'BUS_STOP':
-      return AppIcons.bus;
+      return 'bus';
     default:
-      // Generic "STOP", or a category we do not know: claim nothing.
-      return AppIcons.place;
+      return null;
   }
 }
+
+/// Glyph for a bare mode key — `bus`, `rail`, `shared_auto`.
+IconData modeIconFor(String? mode) => switch (mode) {
+      'rail' => AppIcons.rail,
+      'ferry' => AppIcons.ferry,
+      'tram' => AppIcons.tram,
+      'metro' => AppIcons.metro,
+      'auto' => AppIcons.auto,
+      'shared_auto' => AppIcons.sharedAuto,
+      'bus' => AppIcons.bus,
+      // Generic "STOP", or a mode we do not know: claim nothing.
+      _ => AppIcons.place,
+    };
+
+/// Glyph for an API stop category — `BUS_STOP`, `FERRY_GHAT`, …
+///
+/// Delegates rather than switching again. There were two switches over the
+/// same seven modes, and [ModeAvatar] calling the category one with a bare key
+/// fell through to the generic pin — every tile in the coverage grid drew a
+/// map pin instead of its vehicle.
+IconData modeIcon(String? category) => modeIconFor(modeKey(category));
