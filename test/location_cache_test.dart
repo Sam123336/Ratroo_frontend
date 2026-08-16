@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ratroo_app/core/location_service.dart';
 
 void main() {
+  _debugOverrideGate();
+
   group('canReuse', () {
     test('a real fix is reused briefly, then re-asked', () {
       expect(canReuse(isLive: true, age: const Duration(seconds: 30)), isTrue);
@@ -24,5 +27,26 @@ void main() {
         lessThan(LocationService.cacheFor),
       );
     });
+  });
+}
+
+/// The debug pin must never survive into a release build.
+///
+/// It is gated on `kDebugMode`, which is a compile-time constant — so this
+/// asserts the gate is written in a form the compiler can eliminate, rather
+/// than a runtime flag someone could flip.
+void _debugOverrideGate() {
+  test('the coordinate override is compiled out of release builds', () {
+    final source = File('lib/core/location_service.dart').readAsStringSync();
+    final override = source.substring(source.indexOf('UserLocation? get _debugOverride'));
+
+    // kDebugMode must be the first thing checked, and negated, so the whole
+    // body is dead code under `flutter build --release`.
+    expect(override, contains('if (!kDebugMode'));
+    expect(
+      source.indexOf('kDebugMode'),
+      lessThan(source.indexOf('_debugLat.isEmpty')),
+      reason: 'kDebugMode must gate the override before the defines are read',
+    );
   });
 }

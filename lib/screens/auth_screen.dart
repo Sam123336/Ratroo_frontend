@@ -97,48 +97,64 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               child: Column(
                 children: [
                   if (_isRegistering) ...[
-                    TextFormField(
-                      controller: _nameController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(hintText: 'Your name (optional)'),
+                    _LabelledField(
+                      label: 'Name',
+                      optional: true,
+                      child: TextFormField(
+                        controller: _nameController,
+                        textCapitalization: TextCapitalization.words,
+                        autofillHints: const [AutofillHints.name],
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(hintText: 'Sam Ghosh'),
+                      ),
                     ),
                     const SizedBox(height: RatrooTheme.space4),
                   ],
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(hintText: 'Email'),
-                    validator: (value) {
-                      final email = value?.trim() ?? '';
-                      if (email.isEmpty) return 'Enter your email.';
-                      // Deliberately loose — the server is the real validator.
-                      if (!email.contains('@') || !email.contains('.')) return 'Enter a valid email.';
-                      return null;
-                    },
+                  _LabelledField(
+                    label: 'Email',
+                    child: TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(hintText: 'you@example.com'),
+                      validator: (value) {
+                        final email = value?.trim() ?? '';
+                        if (email.isEmpty) return 'Enter your email.';
+                        // Deliberately loose — the server is the real validator.
+                        if (!email.contains('@') || !email.contains('.')) return 'Enter a valid email.';
+                        return null;
+                      },
+                    ),
                   ),
                   const SizedBox(height: RatrooTheme.space4),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    autofillHints: [_isRegistering ? AutofillHints.newPassword : AutofillHints.password],
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _submit(),
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? AppIcons.hidePassword : AppIcons.showPassword),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                        tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                  _LabelledField(
+                    label: 'Password',
+                    // Stated up front rather than only as an error after the
+                    // fact — a rule you learn by failing is a rule shown too
+                    // late. Sign-in has no such rule to state.
+                    helper: _isRegistering ? 'At least 8 characters' : null,
+                    child: TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      autofillHints: [_isRegistering ? AutofillHints.newPassword : AutofillHints.password],
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _submit(),
+                      decoration: InputDecoration(
+                        hintText: 'Password',
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? AppIcons.hidePassword : AppIcons.showPassword),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                        ),
                       ),
+                      validator: (value) {
+                        if ((value ?? '').isEmpty) return 'Enter your password.';
+                        // Only enforced on sign-up; an existing shorter password must still log in.
+                        if (_isRegistering && value!.length < 8) return 'Use at least 8 characters.';
+                        return null;
+                      },
                     ),
-                    validator: (value) {
-                      if ((value ?? '').isEmpty) return 'Enter your password.';
-                      // Only enforced on sign-up; an existing shorter password must still log in.
-                      if (_isRegistering && value!.length < 8) return 'Use at least 8 characters.';
-                      return null;
-                    },
                   ),
                 ],
               ),
@@ -193,6 +209,68 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A form field with a label that stays put.
+///
+/// The three fields on this screen were placeholder-only. A hint disappears the
+/// moment you type, so a filled form carried no labels at all — a rider who put
+/// their email in the name box saw two identical-looking rows reading
+/// "sam@gmail.com" and nothing to tell them apart. Screen readers had the same
+/// problem: once a field has content there is nothing left to announce.
+///
+/// The label sits *above* the field rather than using `labelText`, because
+/// these inputs are pill-shaped: a floating label notches the outline, and a
+/// notch cut into a full-radius curve reads as a rendering fault.
+///
+/// [Semantics] carries the same name to assistive tech, since a sibling `Text`
+/// is not programmatically tied to the field.
+class _LabelledField extends StatelessWidget {
+  final String label;
+  final Widget child;
+
+  /// Marks the field as not required, in words. An unmarked field is assumed
+  /// required, so only the exception needs stating.
+  final bool optional;
+
+  /// A rule worth knowing before submitting rather than after failing.
+  final String? helper;
+
+  const _LabelledField({
+    required this.label,
+    required this.child,
+    this.optional = false,
+    this.helper,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: RatrooTheme.space3, bottom: 6),
+          child: Row(
+            children: [
+              Text(label, style: theme.textTheme.titleSmall),
+              if (optional) ...[
+                const SizedBox(width: RatrooTheme.space2),
+                Text('Optional', style: theme.textTheme.labelSmall),
+              ],
+            ],
+          ),
+        ),
+        Semantics(label: label, child: child),
+        if (helper != null)
+          Padding(
+            padding: const EdgeInsets.only(left: RatrooTheme.space3, top: 6),
+            child: Text(helper!, style: theme.textTheme.bodySmall),
+          ),
+      ],
     );
   }
 }

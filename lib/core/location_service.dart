@@ -72,9 +72,39 @@ class LocationService {
 
   UserLocation? get lastKnown => _last;
 
+  /// Pin the position, for testing a region you are not standing in:
+  ///   flutter run --dart-define=DEBUG_LAT=12.9629 --dart-define=DEBUG_LNG=77.5775
+  ///
+  /// Debug builds only — [kDebugMode] is a compile-time constant, so in a
+  /// release build the whole branch is tree-shaken away and no override can
+  /// exist in a shipped binary however the defines are passed.
+  ///
+  /// This exists because an emulator's GPS is not dependable. Android's
+  /// emulator console answers `OK` to `geo fix` and then serves the previous
+  /// position — or none — indefinitely, so "show me Karnataka" becomes a
+  /// cold-boot rather than a flag. Coverage differs sharply by state (2,750
+  /// routes in West Bengal, 50 in Karnataka, nothing in Bihar), and each of
+  /// those renders a different screen, so switching regions is routine work.
+  static const _debugLat = String.fromEnvironment('DEBUG_LAT');
+  static const _debugLng = String.fromEnvironment('DEBUG_LNG');
+
+  UserLocation? get _debugOverride {
+    if (!kDebugMode || _debugLat.isEmpty || _debugLng.isEmpty) return null;
+    final lat = double.tryParse(_debugLat);
+    final lng = double.tryParse(_debugLng);
+    if (lat == null || lng == null) return null;
+    // Reported as `live`, because the point is to exercise the screens a real
+    // fix produces — a pinned position that rendered the "no location" banner
+    // would test nothing.
+    return UserLocation(latitude: lat, longitude: lng, status: LocationStatus.live);
+  }
+
   /// Never throws. A refused permission is an answer, not an error — the caller
   /// gets the fallback with a status explaining why.
   Future<UserLocation> current({bool forceRefresh = false}) async {
+    final pinned = _debugOverride;
+    if (pinned != null) return pinned;
+
     final last = _last;
     if (!forceRefresh &&
         last != null &&

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 enum Flavor {
   dev,
   stg,
@@ -20,10 +22,32 @@ class AppFlavors {
     }
   }
 
-  /// Dev host. Override without editing code:
-  ///   flutter run --dart-define=API_HOST=192.168.1.42
-  /// Android emulator uses 10.0.2.2, iOS simulator localhost.
-  static const _devHost = String.fromEnvironment('API_HOST', defaultValue: '192.168.1.6');
+  /// Explicit override, and the only thing that works on a *physical* device:
+  ///   flutter run --dart-define=API_HOST=192.168.1.13
+  static const _apiHostOverride = String.fromEnvironment('API_HOST');
+
+  /// Where the dev API lives, per platform.
+  ///
+  /// This was a hardcoded `192.168.1.6`. That address is not this machine and
+  /// may not be any machine — a LAN IP is a fact about one afternoon's DHCP
+  /// lease, and pinning one in source means the app silently stops reaching
+  /// the backend the next time the router hands out a different number. It
+  /// showed up as "Can't reach Ratroo. Check your connection." with a
+  /// perfectly healthy server running on :3000.
+  ///
+  /// An Android emulator cannot use the host's loopback at all: 127.0.0.1
+  /// inside the emulator is the emulator. `10.0.2.2` is the alias the Android
+  /// emulator maps to the host machine, and it survives any IP change.
+  ///
+  /// A physical phone is the one case with no correct default — it needs the
+  /// machine's LAN address, which only you know. Hence [_apiHostOverride].
+  static String get _devHost {
+    if (_apiHostOverride.isNotEmpty) return _apiHostOverride;
+    if (kIsWeb) return 'localhost';
+    return defaultTargetPlatform == TargetPlatform.android
+        ? '10.0.2.2'
+        : 'localhost';
+  }
 
   /// Vercel project alias — stays valid across deploys. The per-deployment URL
   /// (`ratroo-backend-<buildId>-…`) dies the moment you ship again, so don't pin it.

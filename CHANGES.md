@@ -1,9 +1,11 @@
 # Changes — session of 15 August 2026
 
-`Ratroo_app` only. Navigation architecture and the home screen's hierarchy.
+Both repos. Navigation architecture and the home screen's hierarchy in
+`Ratroo_app`; getting the Vercel deployment to boot at all in `Ratroo_backend`.
 
-**State at the end:** `flutter analyze` clean · 104 Flutter tests (93 → 104) ·
-every change looked at in a running app rather than reasoned about.
+**State at the end:** `flutter analyze` clean · 105 Flutter tests (93 → 105) ·
+backend typechecks clean · Vercel builds and serves · every app change looked
+at in a running app rather than reasoned about.
 
 ---
 
@@ -281,6 +283,158 @@ screen title-case; before that Nearby showed the raw `C.R. AVENUE`.
 Dotted initialisms of any length are now kept (`C.R.`, `B.B.D.`), and the short
 rule only applies to dotless tokens, so `ST.` correctly becomes `St.`.
 
+## Sign-up form had no labels
+
+All three fields were placeholder-only:
+
+```
+hintText: 'Your name (optional)'   hintText: 'Email'   hintText: 'Password'
+```
+
+A hint disappears the moment you type, so a *filled* form carries no labels at
+all. A rider who typed their email into the name box saw two identical rows
+reading "sam@gmail.com" and nothing to tell them apart. Screen readers had the
+same problem: once a field has content there is nothing left to announce.
+
+`_LabelledField` puts the label above the field. Not `labelText`: these inputs
+use `radiusPill`, and a floating label notches the outline — a notch cut into a
+full-radius curve reads as a rendering fault. `Semantics(label:)` carries the
+same name to assistive tech, since a sibling `Text` is not programmatically
+tied to the field.
+
+Also: hints became examples rather than repeated labels (`you@example.com`),
+the name field gained `AutofillHints.name` and word capitalisation, and the
+8-character rule is now stated under the password field on sign-up instead of
+only appearing as an error after failing.
+
+## Backend — the Vercel deployment had never worked
+
+Every path on the deployed API returned Vercel's own `NOT_FOUND` page. Not one
+bug: **six, stacked**, each hidden behind the one before it, so each fix
+revealed the next.
+
+| # | Symptom | Cause |
+|---|---|---|
+| 1 | Vercel `NOT_FOUND` on `/`, `/v1`, everything | Root Directory unset — `apps/api/vercel.json` was never read, so no function was ever built |
+| 2 | `crons[0] should NOT have additional property "//"` | a JSON pseudo-comment; Vercel validates against a strict schema |
+| 3 | `No Output Directory named "public"` | Vercel ran `npm run build` then looked for a static site |
+| 4 | `TypeError: Invalid URL` | `DATABASE_URL` pasted with template placeholders still in it |
+| 5 | `getaddrinfo ENOTFOUND db.<ref>.supabase.co` | Supabase's direct host is **IPv6-only**; Vercel functions are IPv4-only |
+| 6 | `tenant/user … not found` | right pooler, wrong cluster |
+
+Fixes, in the same order: Root Directory set to `apps/api` (via the API, since
+the setting is server-side); the `"//"` key removed and the note it carried —
+that `30 20 * * *` UTC is 02:00 IST — moved to `docs/deployment.md`; an empty
+`apps/api/public/` with a `.gitkeep` explaining why it must stay; and
+`DATABASE_URL` repointed at the connection pooler.
+
+**`assets/`-style footgun in `apps/api`:** `vercel.json` declares the
+*directory*, so everything in it ships — including a `.DS_Store`. Now
+gitignored.
+
+### Finding the right pooler took a sweep, not a guess
+
+Supabase's direct host has no `A` record at all:
+
+```
+db.daqeyqrsnkxaocbwnecd.supabase.co   A: (none)   AAAA: 2406:da12:557:f802:…
+```
+
+That IPv6 prefix is AWS Mumbai, so `ap-south-1` looked obvious. It was wrong.
+Probing every region × cluster with a deliberately junk password separates the
+two failure modes — a wrong tenant says `tenant/user not found`, a *correct*
+tenant says `password authentication failed`:
+
+```
+HIT  aws-1-ap-northeast-2.pooler.supabase.com   password authentication failed
+```
+
+Worth remembering as a technique: **an auth error is a positive result** when
+you are looking for which host owns a tenant, and it needs no real credential.
+
+### Two serverless correctness fixes
+
+- **`connectionTimeoutMillis: 10000`.** `pg` defaults to *no* connect timeout.
+  Sequelize connects during module init, so an unreachable database does not
+  make one route slow — `NestFactory.create` never resolves and **every**
+  endpoint 500s, `/health` included, after a silent ~27 s. That is exactly how
+  this presented, with nothing in the logs naming the database.
+- **`pool: { max: 2, acquire: 15000 }`.** Sequelize defaults to 5 per instance;
+  every warm Vercel container holds its own pool, which against pgbouncer
+  multiplies into connection exhaustion.
+
+Both overridable via `DB_CONNECT_TIMEOUT_MS` / `DB_POOL_MAX`.
+
+### A malformed DATABASE_URL now says so
+
+`new URL()` throws a bare `TypeError: Invalid URL` naming neither the variable
+nor the value, three frames deep, during module init — so the whole app fails
+to boot and the only clue is a stack trace. It now names the variable, the
+expected shape, and the specific reason: unreplaced `< >` placeholders,
+stray `[ ]`, whitespace, or a missing scheme. Four cases exercised.
+
+**Security note recorded here on purpose:** the database password appeared in
+Vercel's runtime logs, because a mis-encoded `@` made Supavisor echo it back as
+part of the username. It needs rotating, and `@` `:` `/` `#` must be
+percent-encoded in the connection URL.
+
+## The dev API host was hardcoded to a machine that does not exist
+
+`flavors.dart` pinned `192.168.1.6`. This Mac is `.13`, and an Android emulator
+cannot reach the host by LAN IP anyway — it needs `10.0.2.2`, the alias the
+emulator maps to the host. The symptom was "Can't reach Ratroo. Check your
+connection." with a perfectly healthy server on `:3000`.
+
+Now chosen per platform, with `--dart-define=API_HOST=` still the override for
+a physical device — the one case with no correct default.
+
+The previous session's notes claim this was already fixed. It was not; the code
+was a plain constant.
+
+## A debug pin for the rider's position
+
+```
+flutter run --dart-define=DEBUG_LAT=12.9629 --dart-define=DEBUG_LNG=77.5775
+```
+
+Coverage differs sharply by state — 2,750 routes in West Bengal, 50 in
+Karnataka, nothing in Bihar — and each renders a different screen, so switching
+regions is routine work. An emulator's GPS is not dependable enough for it:
+the Android emulator console answers `OK` to every `geo fix` and then serves
+the previous position, or none, indefinitely.
+
+Gated on `kDebugMode`, a compile-time constant, so the branch is tree-shaken
+out of release builds entirely. `location_cache_test.dart` asserts the gate
+stays written in that form, so it cannot later be "fixed" into a runtime flag.
+
+## Bengaluru has stops and routes but no times, by choice
+
+A rider opening a BMTC stop sees "The routes below do stop here — we just do
+not have their times". That is accurate: 5,610 stops and 50 routes are
+ingested, and **zero** `stop_times`.
+
+The blocker is not engineering. `bmtc-gtfs-network.ts` already parses
+`agency/routes/stops/trips/stopTimes`, so a feed could be ingested in a day.
+It is `providers/karnataka/bengaluru/README.md` holding the line:
+
+> Unofficial BMTC GTFS datasets are fixtures/research only unless publisher,
+> license, freshness, and permissions are verified.
+
+Three candidate sources were assessed:
+
+| Source | Verdict |
+|---|---|
+| [OpenCity](https://data.opencity.in) BMTC datasets | Cleanest licence, but stops/routes/facilities only — **no timetables**. Duplicates what we hold. |
+| `nimmbus.netlify.app` — OpenAPI for the Namma BMTC backend | Has exactly the gaps: `/GetTimetableByRouteid_v3`, `/GetAllServiceTypes` (Vajra, Vayu Vajra, feeders), fares. But it *is* the AVLS backend our own registry marks **access review required**, on a vendor **staging** host. |
+| `iotakodali/bmtc-realtime-api` | **CC BY-NC-SA** — excluded by our own rule that NonCommercial licences are unusable. Live ETAs only, no timetables. Author warns of IT Act exposure. |
+
+`ServiceClass` already models the bus types — `REGULAR · EXPRESS ·
+LIMITED_STOP · AIRPORT · METRO_FEEDER · INTERCITY · NIGHT · PREMIUM`. The
+schema is ready; only the feed is missing.
+
+Request drafted at `Ratroo_backend/docs/data-requests/dult-bmtc.md`, addressed
+to DULT with BMTC copied. Not yet sent.
+
 ## Still open from this session
 
 - The **planner's destination pin is red** — the same red as
@@ -294,8 +448,12 @@ rule only applies to dotless tokens, so `ST.` correctly becomes `St.`.
   `flutter_svg` and an `assets/icons/` pipeline.
 - Journey planner and Profile both centre a short empty state in a very tall
   void.
-- `README.md` is still the stock Flutter template apart from the run notes
-  added below.
+- **`DATABASE_URL`'s password is in Vercel's runtime logs** and must be
+  rotated; percent-encode `@` when re-setting it.
+- **BMTC timetables** are blocked on the DULT request being sent and answered.
+- The emulator's GPS is wedged on this machine; a cold boot is the fix, and the
+  debug pin is the workaround.
+- `hero_map_pins.png` (375 KB) ships but nothing renders it.
 - Untouched from the previous session's Open list: `Arambagh → Kolkata`
   returning 1,021 minutes, `by-mode` reporting `departures: 0`, metro at zero,
   ~450 untimed WBBUS routes.
