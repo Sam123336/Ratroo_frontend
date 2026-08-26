@@ -195,6 +195,37 @@ class _LegRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // How a rider actually navigates on board: they can watch
+                  // stops go past, but cannot watch a clock inside a crowded
+                  // bus. Kept on its own line for that reason.
+                  if (leg.stopsLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '${leg.stopsLabel!}, then get off',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colour,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  // The wait, and whether it is a real timetable gap or the
+                  // generic estimate. Saying which is the difference between a
+                  // rider planning and a rider guessing.
+                  if (leg.waitLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        leg.waitIsEstimated
+                            ? '${leg.waitLabel!} · typical wait, no times published'
+                            : leg.waitLabel!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontStyle:
+                              leg.waitIsEstimated ? FontStyle.italic : FontStyle.normal,
+                        ),
+                      ),
+                    ),
                   // Only offered when the API gave us a route to open.
                   if (leg.routeId != null)
                     Padding(

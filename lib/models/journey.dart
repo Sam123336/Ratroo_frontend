@@ -80,7 +80,11 @@ class JourneyPlanModel {
 }
 
 class JourneyLegModel {
-  /// WALK, BUS, SUBURBAN_RAIL, METRO, FERRY.
+  /// WALK, BUS, SUBURBAN_RAIL, RAIL, METRO, FERRY, TRAM, AUTO, SHARED_AUTO.
+  ///
+  /// AUTO and SHARED_AUTO arrive from operator-registered services, and are
+  /// kept distinct all the way to the icon: the backend stopped flattening
+  /// them into BUS, and this must not put it back.
   final String mode;
   final String fromPlaceId;
   final String toPlaceId;
@@ -100,6 +104,18 @@ class JourneyLegModel {
   final String? departureTime;
   final String? arrivalTime;
 
+  /// Stops travelled on this leg — what a rider counts out of the window.
+  /// Null on walking and hailed legs, which pass no stops.
+  final int? stopCount;
+
+  /// Minutes waiting at this leg's boarding stop. Null on walks.
+  final int? waitMinutes;
+
+  /// True when that wait is the generic estimate rather than a published gap.
+  /// Shown differently, because an estimate read as a timetable is how someone
+  /// misses the last service of the night.
+  final bool waitIsEstimated;
+
   JourneyLegModel({
     required this.mode,
     required this.fromPlaceId,
@@ -113,8 +129,25 @@ class JourneyLegModel {
     this.fareINR,
     this.departureTime,
     this.arrivalTime,
+    this.stopCount,
+    this.waitMinutes,
+    this.waitIsEstimated = false,
     required this.durationSeconds,
   });
+
+  /// "Stay on for 7 stops" — null when the leg passes none.
+  String? get stopsLabel {
+    final count = stopCount;
+    if (count == null || count <= 0) return null;
+    return 'Stay on for $count ${count == 1 ? 'stop' : 'stops'}';
+  }
+
+  /// "Wait 4 min" / "No wait", or null when nothing is known.
+  String? get waitLabel {
+    final wait = waitMinutes;
+    if (wait == null) return null;
+    return wait == 0 ? 'Change straight over' : 'Wait $wait min';
+  }
 
   bool get isWalk => mode.toUpperCase() == 'WALK';
 
@@ -130,6 +163,10 @@ class JourneyLegModel {
         return 'ferry';
       case 'TRAM':
         return 'tram';
+      case 'AUTO':
+        return 'auto';
+      case 'SHARED_AUTO':
+        return 'shared_auto';
       case 'WALK':
         return 'walk';
       default:
@@ -170,6 +207,9 @@ class JourneyLegModel {
       arrivalTime: json['arrivalTime'] as String?,
       durationSeconds: json['durationSeconds'] ??
           ((json['durationMinutes'] as num?)?.round() ?? 0) * 60,
+      stopCount: (json['stopCount'] as num?)?.round(),
+      waitMinutes: (json['waitMinutes'] as num?)?.round(),
+      waitIsEstimated: json['waitIsEstimated'] == true,
     );
   }
 }
